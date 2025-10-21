@@ -1,0 +1,16 @@
+:root{
+    --primary-color: #3498db;
+    --secondary-color: #2980b9;
+    --background-color: #f9f9f9;
+
+    --hover-background-color: #2980b9;
+    --hover-color: #ecf0f1;
+
+    --font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --font-size-base: 16px;
+    --spacing-unit: 8px;
+
+    --border-radius: 20px;
+    --shadow: rgba(0, 0, 0, 0.2);
+    --glow: rgba(200, 200, 200, 0.3);
+}
