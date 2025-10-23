@@ -2,8 +2,6 @@
 
 A minimal static site for planning public transport routes and viewing schedules.
 
-Live demo: https://sanduleonard31.github.io/PublicTransportPlanner/
-
 ## Demo
 
 Open the demo in your browser:
