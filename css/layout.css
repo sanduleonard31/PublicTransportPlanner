@@ -1,102 +1,90 @@
-body{
+body {
     background-image: url('../assets/gradient.svg');
     background-repeat: no-repeat;
     background-size: cover;
     background-attachment: fixed;
     background-position: center;
 }
-header{
-    /* Flexbox for horizontal layout */
+
+header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-
-    /* Fixed position at the top */
-    position:fixed;
-    top:0;
-    left:0;
-    width:100%;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
     z-index: 1000;
-
-    /* Styling */
     padding: var(--spacing-medium);
     border-radius: 0 0 var(--border-radius) var(--border-radius);
 }
 
-header img{
-    /* Size */
+header img {
     height: var(--image-size-medium);
     width: auto;
-
-    /* Styling */
     background-color: var(--pale-white);
-    border-radius: 100%;
+    border-radius: 50%;
 }
 
-header nav{
-    /* Flexbox for horizontal layout */
+header nav {
     display: flex;
     gap: var(--spacing-medium);
 }
 
-header nav a{
-    /* Styling */
+header nav a {
     border-radius: var(--border-radius);
     background-color: var(--nav-button-bg);
     padding: var(--spacing-small) var(--spacing-medium);
 }
 
-.hero{
-    /* Layout */
+.hero {
     padding: var(--spacing-xxlarge);
     text-align: center;
-    justify-content: center;
-    align-items: center;
-
-    /* Styling */
     margin-bottom: var(--spacing-large);
 }
 
-.content{
+.content {
     display: grid;
     margin-top: var(--spacing-xxxlarge);
     gap: var(--spacing-large);
     grid-template-columns: 1fr 2fr;
 }
 
-main{
-    /* Layout */
+#map {
+    width: 100%;
+    min-height: 320px;
+    border-radius: var(--border-radius);
+    border: 1px solid var(--shadow);
+    overflow: hidden;
+}
+
+#map img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+main {
     padding: var(--spacing-xlarge);
     margin: calc(var(--image-size-large) + var(--spacing-large)) var(--spacing-xxxlarge) var(--spacing-xxxlarge) var(--spacing-xxxlarge);
-    min-height: 100%;
-
+    min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-
-
-
-    /* Styling */
     background-image: url('../assets/background.svg');
     background-color: var(--background-color);
     background-size: var(--image-size-tiny);
     background-position: center;
     border-radius: var(--border-radius);
     border: 1px solid var(--shadow);
-
-
 }
 
-footer{
-    /* Flexbox for horizontal layout */
+footer {
     display: flex;
     align-items: center;
     justify-content: center;
-
-
-
-    /* Styling */
     padding: var(--spacing-medium);
     border-radius: var(--border-radius) var(--border-radius) 0 0;
 }

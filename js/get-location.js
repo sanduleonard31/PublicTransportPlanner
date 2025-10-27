@@ -1,23 +1,16 @@
+// Get DOM elements
+const latitudeDisplay = document.getElementById("latitude");
+const longitudeDisplay = document.getElementById("longitude");
 
-const latitude = document.getElementById("latitude");
-const longitude = document.getElementById("longitude");
-
-function getLocation() {
-  if (navigator.geolocation) {
-    navigator.geolocation.getCurrentPosition(success, error);
-  } else { 
-    x.innerHTML = "Geolocation is not supported by this browser.";
-  }
+// Request user's location
+if (navigator.geolocation) {
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      latitudeDisplay.innerHTML = position.coords.latitude;
+      longitudeDisplay.innerHTML = position.coords.longitude;
+    },
+    () => alert("Sorry, no position available.")
+  );
+} else {
+  alert("Geolocation is not supported by this browser.");
 }
-
-function success(position) {
-  latitude.innerHTML = position.coords.latitude;
-  longitude.innerHTML = position.coords.longitude;
-  
-}
-
-function error() {
-  alert("Sorry, no position available.");
-}
-
-getLocation();
