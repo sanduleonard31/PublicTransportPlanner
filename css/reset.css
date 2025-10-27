@@ -1,24 +1,31 @@
-*{
+* {
     margin: 0;
     padding: 0;
     box-sizing: border-box;
     text-align: center;
 }
-html, body {
+
+html,
+body {
     height: 100%;
     font-family: sans-serif;
 }
+
 a {
-    text-decoration: none;
     color: inherit;
+    text-decoration: none;
 }
-ul, ol {
+
+ul,
+ol {
     list-style: none;
 }
+
 img {
     max-width: 100%;
     height: auto;
 }
+
 button {
     background: none;
     border: none;
