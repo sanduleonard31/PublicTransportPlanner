@@ -1,0 +1,25 @@
+@media (max-width: 768px) {
+    .content{
+        grid-template-columns: 1fr;
+        margin-top: var(--spacing-xxlarge);
+    }
+    .hero{
+        padding: var(--spacing-small);
+    }
+
+    main{
+        padding: var(--spacing-small);
+        
+    margin: calc(var(--image-size-large) + var(--spacing-large)) var(--spacing-medium) var(--spacing-medium) var(--spacing-medium);
+    }
+
+    h1,h2{
+        font-size: var(--font-size-large);
+    }
+    h3,h4,h5,h6{
+        font-size: var(--font-size-medium);
+    }
+    p{
+        font-size: var(--font-size-small);
+    }
+}

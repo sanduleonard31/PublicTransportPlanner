@@ -3,26 +3,42 @@
  * Adjusting values here updates every layer that consumes the variables.
  */
 :root {
-    --primary-color: #334854;
-    --secondary-color: #a1bed2;
+    --primary-color: #b1c7d4;
+    --secondary-color: #85c9f6;
     --pale-white: #f9f9f9;
 
+    --nav-button-bg: #e3e3e3;
+    --nav-button-hover-bg: #e0e0e0;
+
     --font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    
+
     --font-unit: 16px;
     --font-size-small: calc(var(--font-unit) * 0.875);
     --font-size-medium: calc(var(--font-unit) * 1.25);
     --font-size-large: calc(var(--font-unit) * 1.5);
+    --font-size-xlarge: calc(var(--font-unit) * 1.75);
 
-    --line-unit: 1.2;
+    --line-unit: 1.2rem;
     --line-height-small: calc(var(--line-unit) * 0.9);
     --line-height-medium: calc(var(--line-unit) * 1.3);
     --line-height-large: calc(var(--line-unit) * 1.5);
+    --line-height-xlarge: calc(var(--line-unit) * 1.7);
+
+    --image-size-base: 60px;
+    --image-size-tiny: calc(var(--image-size-base) * 0.25);
+    --image-size-small: calc(var(--image-size-base) * 0.5);
+    --image-size-large: calc(var(--image-size-base) * 1.5);
+    --image-size-medium: calc(var(--image-size-base) * 1.0);
+    --image-size-xlarge: calc(var(--image-size-base) * 2.0);
 
 
-    --spacing-unit: 8px;
+    --spacing-unit: 16px;
     --spacing-small: calc(var(--spacing-unit) * 0.5);
+    --spacing-medium: calc(var(--spacing-unit) * 1.0);
     --spacing-large: calc(var(--spacing-unit) * 1.5);
+    --spacing-xlarge: calc(var(--spacing-unit) * 2.0);
+    --spacing-xxlarge: calc(var(--spacing-unit) * 3.0);
+    --spacing-xxxlarge: calc(var(--spacing-unit) * 4.0);
 
     --border-radius: 20px;
     --shadow: rgba(0, 0, 0, 0.2);
