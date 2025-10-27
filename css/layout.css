@@ -1,3 +1,10 @@
+body{
+    background-image: url('../assets/gradient.svg');
+    background-repeat: no-repeat;
+    background-size: cover;
+    background-attachment: fixed;
+    background-position: center;
+}
 header{
     /* Flexbox for horizontal layout */
     display: flex;
@@ -18,12 +25,12 @@ header{
 
 header img{
     /* Size */
-    height: var(--image-size-small);
+    height: var(--image-size-medium);
     width: auto;
 
     /* Styling */
     background-color: var(--pale-white);
-    border-radius: var(--border-radius);
+    border-radius: 100%;
 }
 
 header nav{
@@ -63,9 +70,16 @@ main{
     margin: calc(var(--image-size-large) + var(--spacing-large)) var(--spacing-xxxlarge) var(--spacing-xxxlarge) var(--spacing-xxxlarge);
     min-height: 100%;
 
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+
 
     /* Styling */
     background-image: url('../assets/background.svg');
+    background-color: var(--background-color);
     background-size: var(--image-size-tiny);
     background-position: center;
     border-radius: var(--border-radius);

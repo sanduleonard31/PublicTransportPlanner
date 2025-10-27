@@ -7,8 +7,13 @@
         padding: var(--spacing-small);
     }
 
+    header img{
+        height: var(--image-size-small);
+        width: auto;
+    }
+
     main{
-        padding: var(--spacing-small);
+        padding: var(--spacing-medium);
         
     margin: calc(var(--image-size-large) + var(--spacing-large)) var(--spacing-medium) var(--spacing-medium) var(--spacing-medium);
     }
@@ -21,5 +26,16 @@
     }
     p{
         font-size: var(--font-size-small);
+    }
+
+    #map{
+        height: auto;
+        width: 300px;
+    }
+
+    .container{
+        padding: var(--spacing-small);
+        width: 100%;
+        max-width: 1200px;
     }
 }
