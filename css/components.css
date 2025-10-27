@@ -52,10 +52,14 @@ header nav a {
 
 .hero {
     width: 100%;
-    max-width: 1200px;
-    margin: 0 auto var(--spacing-large);
+    margin: 0 0 var(--spacing-large);
     padding: var(--spacing-xxlarge);
     text-align: center;
+}
+
+.hero h1{
+    font-size: var(--font-size-xxxlarge);
+    font-weight: 400;
 }
 
 footer {

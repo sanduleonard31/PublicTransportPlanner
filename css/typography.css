@@ -1,0 +1,34 @@
+body,
+input,
+textarea,
+select,
+p,
+button {
+	font-family: var(--font-family-base);
+	font-weight: 400;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+	font-family: var(--font-family-heading);
+	font-weight: 600;
+}
+
+h1 {
+	font-size: var(--font-size-xxxlarge);
+	line-height: var(--line-height-large);
+}
+
+h2 {
+	font-size: var(--font-size-xlarge);
+	line-height: var(--line-height-medium);
+}
+
+p {
+	font-size: var(--font-unit);
+	line-height: var(--line-height-large);
+}

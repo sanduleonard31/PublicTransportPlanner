@@ -11,13 +11,16 @@
     --nav-button-hover-bg: #e0e0e0;
     --background-color: rgba(255, 255, 255, 0.5);
 
-    --font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    --font-family-base: 'Inter', sans-serif;
+    --font-family-heading: 'Playfair Display', serif;
 
     --font-unit: 16px;
     --font-size-small: calc(var(--font-unit) * 0.875);
     --font-size-medium: calc(var(--font-unit) * 1.25);
     --font-size-large: calc(var(--font-unit) * 1.5);
     --font-size-xlarge: calc(var(--font-unit) * 1.75);
+    --font-size-xxlarge: calc(var(--font-unit) * 2.0);
+    --font-size-xxxlarge: calc(var(--font-unit) * 3.5);
 
     --line-unit: 1.2rem;
     --line-height-small: calc(var(--line-unit) * 0.9);

@@ -1,17 +1,14 @@
 main {
     display: flex;
     flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-start;
     min-height: 100vh;
     padding: var(--spacing-xlarge);
     margin: calc(var(--image-size-large) + var(--spacing-large)) var(--spacing-xxxlarge) var(--spacing-xxxlarge) var(--spacing-xxxlarge);
-    background-color: var(--background-color);
+
     background-image: url('../assets/background.svg');
     background-position: center;
-    background-size: var(--image-size-tiny);
-    border: 1px solid var(--shadow);
-    border-radius: var(--border-radius);
+    background-size: 10px;
+    border-radius: calc(var(--border-radius)*2);
 }
 
 .content {
@@ -19,8 +16,7 @@ main {
     grid-template-columns: 1fr 2fr;
     gap: var(--spacing-large);
     width: 100%;
-    max-width: 1200px;
-    margin: var(--spacing-xxxlarge) auto 0;
+    margin: var(--spacing-xxxlarge) 0 0;
 }
 
 .info-column,
