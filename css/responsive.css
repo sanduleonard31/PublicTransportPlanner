@@ -1,7 +1,7 @@
 @media (max-width: 768px) {
     .content {
         grid-template-columns: 1fr;
-        margin-top: var(--spacing-xxlarge);
+        margin: var(--spacing-xxlarge) auto 0;
     }
 
     .hero {
@@ -11,6 +11,11 @@
     header img {
         height: var(--image-size-small);
         width: auto;
+    }
+
+    header nav ul {
+        gap: var(--spacing-small);
+        flex-wrap: wrap;
     }
 
     main {
@@ -38,7 +43,8 @@
         width: 100%;
     }
 
-    .container {
-        padding: var(--spacing-small);
+    .info-column,
+    .content-column {
+        padding: var(--spacing-medium);
     }
 }

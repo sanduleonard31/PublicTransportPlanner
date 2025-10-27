@@ -1,8 +1,8 @@
 main {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    align-items: stretch;
+    justify-content: flex-start;
     min-height: 100vh;
     padding: var(--spacing-xlarge);
     margin: calc(var(--image-size-large) + var(--spacing-large)) var(--spacing-xxxlarge) var(--spacing-xxxlarge) var(--spacing-xxxlarge);
@@ -18,7 +18,17 @@ main {
     display: grid;
     grid-template-columns: 1fr 2fr;
     gap: var(--spacing-large);
-    margin-top: var(--spacing-xxxlarge);
+    width: 100%;
+    max-width: 1200px;
+    margin: var(--spacing-xxxlarge) auto 0;
+}
+
+.info-column,
+.content-column {
+    display: flex;
+    flex-direction: column;
+    gap: var(--spacing-medium);
+    padding: var(--spacing-large);
 }
 
 #map {

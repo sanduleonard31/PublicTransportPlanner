@@ -11,6 +11,12 @@ header {
     border-radius: 0 0 var(--border-radius) var(--border-radius);
 }
 
+header .logo {
+    display: flex;
+    align-items: center;
+    gap: var(--spacing-small);
+}
+
 header img {
     width: auto;
     height: var(--image-size-medium);
@@ -19,18 +25,35 @@ header img {
 }
 
 header nav {
+    margin: 0;
+}
+
+header nav ul {
     display: flex;
+    align-items: center;
     gap: var(--spacing-medium);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+header nav li {
+    display: flex;
 }
 
 header nav a {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     padding: var(--spacing-small) var(--spacing-medium);
     background-color: var(--nav-button-bg);
     border-radius: var(--border-radius);
 }
 
 .hero {
-    margin-bottom: var(--spacing-large);
+    width: 100%;
+    max-width: 1200px;
+    margin: 0 auto var(--spacing-large);
     padding: var(--spacing-xxlarge);
     text-align: center;
 }
