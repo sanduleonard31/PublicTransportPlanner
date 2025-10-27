@@ -1,0 +1,44 @@
+header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding: var(--spacing-medium);
+    border-radius: 0 0 var(--border-radius) var(--border-radius);
+}
+
+header img {
+    width: auto;
+    height: var(--image-size-medium);
+    background-color: var(--pale-white);
+    border-radius: 50%;
+}
+
+header nav {
+    display: flex;
+    gap: var(--spacing-medium);
+}
+
+header nav a {
+    padding: var(--spacing-small) var(--spacing-medium);
+    background-color: var(--nav-button-bg);
+    border-radius: var(--border-radius);
+}
+
+.hero {
+    margin-bottom: var(--spacing-large);
+    padding: var(--spacing-xxlarge);
+    text-align: center;
+}
+
+footer {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--spacing-medium);
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
+}
