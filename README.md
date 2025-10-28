@@ -1,25 +1,32 @@
 # Public Transport Planner
 
-A minimal static site for planning public transport routes and viewing schedules.
+Hey there! This is my lightweight web project for mapping public transport routes and peeking at schedules. It is all static files, so you can open it straight in a browser or toss it onto any basic host.
 
-## Demo
+## Try It Out
 
-Open the demo in your browser:
+- Live page (GitHub Pages): https://sanduleonard31.github.io/PublicTransportPlanner/
+- Works best on a modern browser. I mostly tested in Chrome because that is what my classmates use.
 
-- Live demo (hosted on GitHub Pages): https://sanduleonard31.github.io/PublicTransportPlanner/
+## Project Tour
 
-## Files
+Here is how the repo is laid out so you can jump in without getting lost:
 
-Top-level files and folders:
+- `index.html` - the main landing page
+- `header.html`, `footer.html` - reusable page fragments
+- `css/` - all the styles (layout, responsive tweaks, utility classes, etc.)
+- `js/` - scripts for the header, footer, map drawing, and location lookups
+- `assets/` - images plus any other static goodies
+- `data/location.json` - sample data that feeds the map
 
-- `index.html` — main page
-- `header.html`, `footer.html` — header/footer fragments
-- `css/` — styles (layout, responsive, utilities, etc.)
-- `js/` — site JavaScript (main, header, footer)
-- `assets/` — images and other static assets
+## How I Work On It
 
-## Development notes
+- No build tools. Just open the HTML files or run a tiny local server if you want live reload.
+- Styling is split into multiple CSS files so I can swap pieces in and out while studying.
+- JavaScript is vanilla so you can read it without importing frameworks.
 
-- The site is static HTML/CSS/JS—no build step is required.
-- Use the files in `css/` and `js/` to modify layout and behaviors.
+## Notes To Future Me (and You)
+
+- `css/global.css` and `css/layout.css` are the usual first stops if something looks off.
+- `js/main.js` initializes the page; map logic lives in `js/draw-map.js`.
+- Feel free to fork and experiment. If you break it, git checkout saves the day.
 
