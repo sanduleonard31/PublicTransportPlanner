@@ -51,4 +51,8 @@
     .content-column {
         padding: var(--spacing-medium);
     }
+
+    .card-grid {
+        grid-template-columns: 1fr;
+    }
 }

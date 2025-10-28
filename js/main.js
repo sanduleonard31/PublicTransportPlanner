@@ -107,3 +107,69 @@ const nearbyPlaces = [
 		]
 	}
 ];
+
+const renderTransportCard = (option) => `
+	<article class="card card--transport">
+		<div class="card__header">
+			<span class="card__badge">${option.mode}</span>
+			<span class="card__status">${option.status}</span>
+		</div>
+		<h4 class="card__title">${option.title}</h4>
+		<p class="card__detail">${option.detail}</p>
+		<dl class="card__meta">
+			<div class="card__meta-item">
+				<dt>Provider</dt>
+				<dd>${option.provider}</dd>
+			</div>
+			<div class="card__meta-item">
+				<dt>ETA</dt>
+				<dd>${option.eta}</dd>
+			</div>
+		</dl>
+	</article>
+`;
+
+const renderNearbyPlaceCard = (group) => {
+	const items = group.items
+		.map((item) => `
+			<li class="card__list-item">
+				<div class="card__list-row">
+					<span class="card__item-title">${item.name}</span>
+					<span class="card__pill card__pill--accent">${item.rating}</span>
+				</div>
+				<div class="card__list-row">
+					<span class="card__item-meta">${item.address}</span>
+					<span class="card__pill">${item.distance}</span>
+				</div>
+				<p class="card__item-detail">${item.highlights}</p>
+			</li>
+		`)
+		.join('');
+
+	return `
+		<article class="card card--places">
+			<div class="card__header">
+				<h4 class="card__title">${group.category}</h4>
+			</div>
+			<p class="card__subtitle">${group.description}</p>
+			<ul class="card__list">${items}</ul>
+		</article>
+	`;
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+	const transportCardsContainer = document.getElementById('transport-cards');
+	const placesCardsContainer = document.getElementById('places-cards');
+
+	if (transportCardsContainer) {
+		transportCardsContainer.innerHTML = transportOptions
+			.map(renderTransportCard)
+			.join('');
+	}
+
+	if (placesCardsContainer) {
+		placesCardsContainer.innerHTML = nearbyPlaces
+			.map(renderNearbyPlaceCard)
+			.join('');
+	}
+});
