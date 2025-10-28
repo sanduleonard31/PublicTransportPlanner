@@ -109,50 +109,39 @@ const nearbyPlaces = [
 ];
 
 const renderTransportCard = (option) => `
-	<article class="card card--transport">
-		<div class="card__header">
-			<span class="card__badge">${option.mode}</span>
-			<span class="card__status">${option.status}</span>
+	<article class="card">
+		<div class="card-header">
+			<span class="card-badge">${option.mode}</span>
+			<span class="card-status">${option.status}</span>
 		</div>
-		<h4 class="card__title">${option.title}</h4>
-		<p class="card__detail">${option.detail}</p>
-		<dl class="card__meta">
-			<div class="card__meta-item">
-				<dt>Provider</dt>
-				<dd>${option.provider}</dd>
-			</div>
-			<div class="card__meta-item">
-				<dt>ETA</dt>
-				<dd>${option.eta}</dd>
-			</div>
-		</dl>
+		<h4 class="card-title">${option.title}</h4>
+		<p class="card-text">${option.detail}</p>
+		<div class="card-tags">
+			<span class="card-tag">${option.provider}</span>
+			<span class="card-tag">${option.eta}</span>
+		</div>
 	</article>
 `;
 
 const renderNearbyPlaceCard = (group) => {
 	const items = group.items
 		.map((item) => `
-			<li class="card__list-item">
-				<div class="card__list-row">
-					<span class="card__item-title">${item.name}</span>
-					<span class="card__pill card__pill--accent">${item.rating}</span>
+			<li>
+				<div class="card-header">
+					<strong>${item.name}</strong>
+					<span class="card-tag">${item.rating}</span>
 				</div>
-				<div class="card__list-row">
-					<span class="card__item-meta">${item.address}</span>
-					<span class="card__pill">${item.distance}</span>
-				</div>
-				<p class="card__item-detail">${item.highlights}</p>
+				<p class="card-text">${item.address} - ${item.distance}</p>
+				<small>${item.highlights}</small>
 			</li>
 		`)
 		.join('');
 
 	return `
-		<article class="card card--places">
-			<div class="card__header">
-				<h4 class="card__title">${group.category}</h4>
-			</div>
-			<p class="card__subtitle">${group.description}</p>
-			<ul class="card__list">${items}</ul>
+		<article class="card">
+			<h4 class="card-title">${group.category}</h4>
+			<p class="card-text">${group.description}</p>
+			<ul class="card-list">${items}</ul>
 		</article>
 	`;
 };
