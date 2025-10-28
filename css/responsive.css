@@ -15,7 +15,11 @@
 
     header nav ul {
         gap: var(--spacing-small);
-        flex-wrap: wrap;
+        font-size:  var(--font-size-small);
+    }
+
+    header .logo h3 {
+        font-size: var(--font-size-small);
     }
 
     main {

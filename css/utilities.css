@@ -4,3 +4,11 @@
     margin: 0 auto;
     padding: var(--spacing-medium);
 }
+
+.line{
+    width: 100%;
+    height: 1px;
+    background-color: var(--line-color);
+    margin: var(--spacing-medium) 0;
+    opacity: 0.5;
+}
