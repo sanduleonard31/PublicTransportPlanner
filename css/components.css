@@ -175,3 +175,45 @@ footer {
 .card-list li small {
     color: rgba(11, 37, 65, 0.7);
 }
+
+/* --- TAB NAVIGATION (Big & Bold) --- */
+
+.tabs-container {
+    display: flex;
+    width: 100%;
+    gap: var(--spacing-medium);       /* Space between buttons */
+    margin-bottom: var(--spacing-large); /* Space below the tabs */
+}
+
+.tab-btn {
+    flex: 1;                          /* Force buttons to share width 50/50 */
+    padding: var(--spacing-medium);   /* Tall clickable area */
+    
+    font-family: var(--font-family-heading);
+    font-size: var(--font-size-medium);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    
+    background: rgba(255, 255, 255, 0.15); /* Semi-transparent white */
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: var(--border-radius);
+    color: #0b2541;                   /* Dark text for readability */
+    
+    cursor: pointer;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(5px);
+}
+
+.tab-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: translateY(-2px);
+}
+
+/* The Active State (Selected Tab) */
+.tab-btn.active {
+    background: var(--secondary-color); /* Uses your bright blue variable */
+    border-color: var(--secondary-color);
+    box-shadow: 0 4px 15px var(--glow);
+    opacity: 1;
+}

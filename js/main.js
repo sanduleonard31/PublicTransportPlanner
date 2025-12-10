@@ -1,301 +1,327 @@
-const fallbackTransportOptions = [
-	{
-		mode: '{{MODE}}',
-	title: '{{TITLE}}',
-	detail: '{{DETAIL}}',
-	provider: '{{PROVIDER}}',
-	eta: '{{ETA}}',
-	status: '{{STATUS}}'
-	}
-];
-
-
-const fallbackNearbyPlaces = [
-	{
-		category: '{{CATEGORY}}',
-		description: '{{DESCRIPTION}}',
-		items: [
-			{
-			name: '{{PLACE_NAME}}',
-			address: '{{ADDRESS}}',
-			rating: '{{RATING}}',
-			distance: '{{DISTANCE}}',
-			highlights: '{{HIGHLIGHTS}}'
-		}
-	]
-	}
-];
-
-const renderTransportCard = (option) => `
-	<article class="card">
-		<div class="card-header">
-			<span class="card-badge">${option.mode}</span>
-			<span class="card-status">${option.status}</span>
-		</div>
-		<h4 class="card-title">${option.title}</h4>
-		<p class="card-text">${option.detail}</p>
-		<div class="card-tags">
-			<span class="card-tag">${option.provider}</span>
-			<span class="card-tag">${option.eta}</span>
-		</div>
-	</article>
-`;
-
-const renderNearbyPlaceCard = (group) => {
-	const items = group.items
-		.map((item) => `
-			<li>
-				<div class="card-header">
-					<strong>${item.name}</strong>
-					<span class="card-tag">${item.rating}</span>
-				</div>
-				<p class="card-text">${item.address} - ${item.distance}</p>
-				<small>${item.highlights}</small>
-			</li>
-		`)
-		.join('');
-
-	return `
-		<article class="card">
-			<h4 class="card-title">${group.category}</h4>
-			<p class="card-text">${group.description}</p>
-			<ul class="card-list">${items}</ul>
-		</article>
-	`;
+/**
+ * --- GLOBAL STATE ---
+ */
+const STATE = {
+    userCoords: null,
+    currentTab: 'transport',
+    transport: { allItems: [], currentIndex: 0 },
+    places: { groups: {}, indexes: {} }
 };
 
-const renderList = (targetId, data, renderer) => {
-	const container = document.getElementById(targetId);
-	if (!container) return;
-	container.innerHTML = data.map(renderer).join('');
+const PAGE_SIZE = 5;
+
+/**
+ * --- INTERACTION HANDLERS ---
+ */
+window.selectLocation = function(category, lat, lon, title, dist, eta) {
+    
+    // 1. Highlight Map Route
+    if (window.highlightRoute) window.highlightRoute(lat, lon);
+
+    // 2. Update Trip Info Box
+    const detailsBox = document.getElementById('trip-details');
+    if (detailsBox) {
+        detailsBox.style.display = 'block';
+        document.getElementById('trip-name').textContent = title;
+        document.getElementById('trip-distance').textContent = dist;
+        document.getElementById('trip-eta').textContent = eta;
+    }
 };
 
-const toRadians = (value) => (value * Math.PI) / 180;
+window.switchTab = function(tabName) {
+    STATE.currentTab = tabName;
 
-const distanceBetween = (origin, target) => {
-	if (!origin || !target) return Number.NaN;
-	const { latitude: lat1, longitude: lon1 } = origin;
-	const { latitude: lat2, longitude: lon2 } = target;
-	if (![lat1, lon1, lat2, lon2].every(Number.isFinite)) return Number.NaN;
-	const dLat = toRadians(lat2 - lat1);
-	const dLon = toRadians(lon2 - lon1);
-	const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRadians(lat1)) * Math.cos(toRadians(lat2)) * Math.sin(dLon / 2) ** 2;
-	const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-	return 6371000 * c;
+    // Toggle HTML Visibility
+    const transportSec = document.getElementById('transport-section');
+    const placesSec = document.getElementById('places-section');
+    const buttons = document.querySelectorAll('.tab-btn');
+
+    if (buttons.length >= 2) {
+        if (tabName === 'transport') {
+            transportSec.style.display = 'block';
+            placesSec.style.display = 'none';
+            buttons[0].classList.add('active');
+            buttons[1].classList.remove('active');
+        } else {
+            transportSec.style.display = 'none';
+            placesSec.style.display = 'block';
+            buttons[0].classList.remove('active');
+            buttons[1].classList.add('active');
+        }
+    }
+
+    // Sync Map
+    updateMapWithVisibleItems();
 };
 
-const formatDistance = (meters) => {
-	if (!Number.isFinite(meters)) return 'Distance unavailable';
-	if (meters < 1000) return `${Math.round(meters)} m`;
-	return `${(meters / 1000).toFixed(1)} km`;
+window.nextTransport = function() {
+    STATE.transport.currentIndex += PAGE_SIZE;
+    if (STATE.transport.currentIndex >= STATE.transport.allItems.length) {
+        STATE.transport.currentIndex = 0;
+    }
+    renderTransportList();
+    updateMapWithVisibleItems();
 };
 
-const estimateWalkingTime = (meters) => {
-	if (!Number.isFinite(meters)) return '—';
-	const minutes = Math.max(1, Math.round(meters / 80));
-	return `~${minutes} min walk`;
+window.nextPlaceGroup = function(categoryKey) {
+    STATE.places.indexes[categoryKey] += PAGE_SIZE;
+    const groupItems = STATE.places.groups[categoryKey].items;
+    
+    if (STATE.places.indexes[categoryKey] >= groupItems.length) {
+        STATE.places.indexes[categoryKey] = 0;
+    }
+    renderPlacesList();
+    updateMapWithVisibleItems();
 };
 
-const determineMode = (tags = {}) => {
-	if (['station', 'halt', 'stop'].includes(tags.railway)) return 'Train';
-	if (tags.railway === 'tram_stop') return 'Tram';
-	if (tags.railway === 'subway_entrance' || tags.subway === 'yes') return 'Metro';
-	if (tags.highway === 'bus_stop' || tags.bus === 'yes') return 'Bus';
-	if (tags.aerialway) return 'Cable';
-	if (tags.route === 'ferry' || tags.ferry === 'yes') return 'Ferry';
-	return 'Transit';
-};
+/**
+ * --- MAP SYNCHRONIZER ---
+ */
+function updateMapWithVisibleItems() {
+    if (!STATE.userCoords) return;
 
-const formatAddress = (tags = {}) => {
-	const parts = [tags['addr:street'], tags['addr:housenumber']].filter(Boolean);
-	if (parts.length) return parts.join(' ');
-	if (tags['addr:full']) return tags['addr:full'];
-	if (tags['addr:city']) return tags['addr:city'];
-	return 'Address unavailable';
-};
+    let targetsToDraw = [];
 
-const formatHighlights = (tags = {}) => {
-	const features = [];
-	if (tags.cuisine) features.push(tags.cuisine.split(';').slice(0, 2).map((item) => item.trim()).join(', '));
-	if (tags.opening_hours) features.push(`Hours: ${tags.opening_hours}`);
-	if (tags.wheelchair === 'yes') features.push('Wheelchair accessible');
-	if (tags.website) features.push('Website available');
-	return features.slice(0, 2).join(' • ') || 'Local favorite';
-};
+    if (STATE.currentTab === 'transport') {
+        const start = STATE.transport.currentIndex;
+        targetsToDraw = STATE.transport.allItems.slice(start, start + PAGE_SIZE);
+    } 
+    else if (STATE.currentTab === 'places') {
+        Object.keys(STATE.places.groups).forEach(key => {
+            const group = STATE.places.groups[key];
+            const start = STATE.places.indexes[key];
+            targetsToDraw = targetsToDraw.concat(group.items.slice(start, start + PAGE_SIZE));
+        });
+    }
 
-const fetchOverpassData = async (query) => {
-	const response = await fetch('https://overpass-api.de/api/interpreter', {
-		method: 'POST',
-		headers: { 'Content-Type': 'text/plain; charset=UTF-8' },
-		body: query
-	});
-	if (!response.ok) throw new Error(`Overpass request failed with ${response.status}`);
-	return response.json();
-};
+    if (window.drawConnections) {
+        window.drawConnections(STATE.userCoords, targetsToDraw);
+    }
+}
 
-const buildTransportData = (elements = [], coords) => {
-	const enriched = elements
-		.map((element) => {
-			const tags = element.tags || {};
-			const latitude = element.lat ?? element.center?.lat;
-			const longitude = element.lon ?? element.center?.lon;
-			if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
-			const distance = distanceBetween(coords, { latitude, longitude });
-			const mode = determineMode(tags);
-			const detailParts = [];
-			if (tags.ref) detailParts.push(`Line ${tags.ref}`);
-			if (tags.route_ref && tags.route_ref !== tags.ref) detailParts.push(`Routes ${tags.route_ref}`);
-			detailParts.push(formatDistance(distance));
-			return {
-				mode,
-				title: tags.name || tags.ref || `${mode} stop`,
-				detail: detailParts.filter(Boolean).join('  '),
-				provider: tags.operator || tags.network || 'Public transport',
-				eta: estimateWalkingTime(distance),
-				status: 'Nearby',
-				_key: `${mode}-${tags.name || tags.ref || latitude.toFixed(3)}-${longitude.toFixed(3)}`,
-				_distance: distance
-			};
-		})
-		.filter(Boolean)
-		.sort((a, b) => a._distance - b._distance);
 
-	const deduped = [];
-	const seen = new Set();
-	for (const item of enriched) {
-		if (seen.has(item._key)) continue;
-		seen.add(item._key);
-		deduped.push(item);
-		if (deduped.length === 3) break;
-	}
+/**
+ * --- RENDERERS ---
+ */
+function renderTransportList() {
+    const container = document.getElementById('transport-cards');
+    if (!container) return;
 
-	return deduped.map(({ _distance, _key, ...rest }) => rest);
-};
+    const start = STATE.transport.currentIndex;
+    const batch = STATE.transport.allItems.slice(start, start + PAGE_SIZE);
 
-const buildPlaceData = (elements = [], coords) => {
-	const groups = [
-		{
-			key: 'food',
-			category: 'Food & Drink',
-			description: 'Quick bites within a short walk.',
-			match: (tags) => ['cafe', 'restaurant', 'fast_food', 'pub', 'bar', 'ice_cream', 'biergarten'].includes(tags.amenity),
-			items: []
-		},
-		{
-			key: 'services',
-			category: 'Mobility & Services',
-			description: 'Helpful stops while you travel.',
-			match: (tags) => ['bicycle_rental', 'charge', 'charging_station', 'car_sharing', 'taxi', 'fuel'].includes(tags.amenity) || ['convenience', 'supermarket', 'travel_agency', 'bicycle', 'bakery', 'pharmacy'].includes(tags.shop),
-			items: []
-		},
-		{
-			key: 'recreation',
-			category: 'Parks & Recreation',
-			description: 'Places to unwind near your route.',
-			match: (tags) => ['park', 'pitch', 'fitness_centre', 'sports_centre', 'garden', 'swimming_pool'].includes(tags.leisure) || tags.tourism === 'museum',
-			items: []
-		}
-	];
+    if (batch.length === 0) {
+        container.innerHTML = '<p style="opacity:0.6;">No transport found.</p>';
+        return;
+    }
 
-	const byKey = new Map(groups.map((group) => [group.key, group]));
+    const cardsHtml = batch.map(item => `
+        <article class="card" style="cursor: pointer;" 
+            onclick="selectLocation('${item.mode}', ${item.lat}, ${item.lon}, '${item.title}', '${formatDistance(item._dist)}', '${item.eta}')">
+            <div class="card-header">
+                <span class="card-badge">${item.mode}</span>
+                <span class="card-status">${item.status}</span>
+            </div>
+            <h4 class="card-title">${item.title}</h4>
+            <p class="card-text">${item.detail}</p>
+            <div class="card-tags">
+                <span class="card-tag">${item.provider}</span>
+                <span class="card-tag">${item.eta}</span>
+            </div>
+        </article>
+    `).join('');
 
-	elements.forEach((element) => {
-		const tags = element.tags || {};
-		const latitude = element.lat ?? element.center?.lat;
-		const longitude = element.lon ?? element.center?.lon;
-		if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
-		const group = groups.find((item) => item.match(tags));
-		if (!group) return;
-		const distance = distanceBetween(coords, { latitude, longitude });
-		group.items.push({
-			name: tags.name || 'Unnamed place',
-			address: formatAddress(tags),
-			rating: estimateWalkingTime(distance),
-			distance: formatDistance(distance),
-			highlights: formatHighlights(tags),
-			_distance: distance
-		});
-	});
+    let buttonHtml = '';
+    if (STATE.transport.allItems.length > PAGE_SIZE) {
+        buttonHtml = `<div style="grid-column: 1 / -1; text-align: center;">
+            <button class="next-btn" onclick="nextTransport()">Show Next ${PAGE_SIZE} ⟳</button>
+        </div>`;
+    }
 
-	return groups
-		.map((group) => {
-			const sorted = group.items.sort((a, b) => a._distance - b._distance).slice(0, 3);
-			return sorted.length
-				? {
-					category: group.category,
-					description: group.description,
-					items: sorted.map(({ _distance, ...rest }) => rest)
-				}
-				: null;
-		})
-		.filter(Boolean);
-};
+    container.innerHTML = cardsHtml + buttonHtml;
+}
 
-const loadTransportData = async (coords) => {
-	const radius = 1500;
-	const { latitude, longitude } = coords;
-	const query = `[out:json][timeout:25];
-(
-  node["highway"="bus_stop"](around:${radius},${latitude},${longitude});
-  node["railway"="tram_stop"](around:${radius},${latitude},${longitude});
-  node["railway"="station"](around:${radius},${latitude},${longitude});
-  node["railway"="subway_entrance"](around:${radius},${latitude},${longitude});
-);
-out center 60;`;
-	const data = await fetchOverpassData(query);
-	return buildTransportData(data.elements, coords);
-};
+function renderPlacesList() {
+    const container = document.getElementById('places-cards');
+    if (!container) return;
 
-const loadPlaceData = async (coords) => {
-	const radius = 1200;
-	const { latitude, longitude } = coords;
-	const query = `[out:json][timeout:25];
-(
-  node["amenity"~"cafe|restaurant|fast_food|pub|bar|ice_cream|biergarten"](around:${radius},${latitude},${longitude});
-  way["amenity"~"cafe|restaurant|fast_food|pub|bar|ice_cream|biergarten"](around:${radius},${latitude},${longitude});
-  node["amenity"~"bicycle_rental|charging_station|car_sharing|taxi|fuel"](around:${radius},${latitude},${longitude});
-  way["amenity"~"bicycle_rental|charging_station|car_sharing|taxi|fuel"](around:${radius},${latitude},${longitude});
-  node["shop"~"convenience|supermarket|travel_agency|bicycle|bakery|pharmacy"](around:${radius},${latitude},${longitude});
-  way["shop"~"convenience|supermarket|travel_agency|bicycle|bakery|pharmacy"](around:${radius},${latitude},${longitude});
-  node["leisure"~"park|pitch|fitness_centre|sports_centre|garden|swimming_pool"](around:${radius},${latitude},${longitude});
-  way["leisure"~"park|pitch|fitness_centre|sports_centre|garden|swimming_pool"](around:${radius},${latitude},${longitude});
-  node["tourism"="museum"](around:${radius},${latitude},${longitude});
-  way["tourism"="museum"](around:${radius},${latitude},${longitude});
-);
-out center 80;`;
-	const data = await fetchOverpassData(query);
-	return buildPlaceData(data.elements, coords);
-};
+    const groupsHtml = Object.keys(STATE.places.groups).map(key => {
+        const group = STATE.places.groups[key];
+        const currentIndex = STATE.places.indexes[key];
+        const batch = group.items.slice(currentIndex, currentIndex + PAGE_SIZE);
 
-const updateCardsWithLocation = async (coords) => {
-	try {
-		const [transportData, placeData] = await Promise.all([
-			loadTransportData(coords),
-			loadPlaceData(coords)
-		]);
-		if (transportData.length) {
-			renderList('transport-cards', transportData, renderTransportCard);
-		}
-		if (placeData.length) {
-			renderList('places-cards', placeData, renderNearbyPlaceCard);
-		}
-	} catch (error) {
-		console.error('Failed to load live data', error);
-	}
-};
+        if (batch.length === 0) return '';
 
-document.addEventListener('DOMContentLoaded', () => {
-	renderList('transport-cards', fallbackTransportOptions, renderTransportCard);
-	renderList('places-cards', fallbackNearbyPlaces, renderNearbyPlaceCard);
+        const listItems = batch.map(item => {
+            const safeName = item.name.replace(/'/g, "\\'");
+            return `
+            <li style="cursor: pointer;" onclick="event.stopPropagation(); selectLocation('${group.category}', ${item.lat}, ${item.lon}, '${safeName}', '${item.distance}', '${item.rating}')">
+                <div class="card-header">
+                    <strong>${item.name}</strong>
+                    <span class="card-tag">${item.rating}</span>
+                </div>
+                <p class="card-text">${item.address} - ${item.distance}</p>
+            </li>`;
+        }).join('');
 
-	if (!navigator.geolocation) {
-		console.warn('Geolocation is not supported on this device.');
-		return;
-	}
+        let nextBtn = '';
+        if (group.items.length > PAGE_SIZE) {
+            nextBtn = `<button class="next-link" onclick="nextPlaceGroup('${key}')">Show Next ${PAGE_SIZE} ⟳</button>`;
+        }
 
-	navigator.geolocation.getCurrentPosition(
-		({ coords }) => updateCardsWithLocation(coords),
-		(error) => console.warn('Unable to retrieve current position', error),
-		{ enableHighAccuracy: true, timeout: 15000, maximumAge: 60000 }
-	);
+        return `
+        <article class="card">
+            <h4 class="card-title">${group.category} 🎵</h4>
+            <p class="card-text">${group.description}</p>
+            <ul class="card-list">${listItems}</ul>
+            ${nextBtn}
+        </article>`;
+    }).join('');
+
+    container.innerHTML = groupsHtml;
+}
+
+/**
+ * --- HELPERS ---
+ */
+function getDistance(origin, target) {
+    if (!origin || !target) return Infinity;
+    const R = 6371000; 
+    const toRad = n => n * Math.PI / 180;
+    const dLat = toRad(target.latitude - origin.latitude);
+    const dLon = toRad(target.longitude - origin.longitude);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(origin.latitude))*Math.cos(toRad(target.latitude))*Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+function formatDistance(m) { return m === Infinity ? '—' : (m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(1) + ' km'); }
+function estimateWalk(m) { return m === Infinity ? '—' : '~' + Math.max(1, Math.round(m / 80)) + ' min walk'; }
+
+function fetchOverpass(query) {
+    return fetch('https://overpass-api.de/api/interpreter', {
+        method: 'POST', body: '[out:json][timeout:25];' + query + 'out center 60;'
+    }).then(res => res.json()).then(data => data.elements);
+}
+
+function processTransport(elements, userCoords) {
+    return elements.map(el => {
+        const tags = el.tags || {};
+        if (!tags.name && !tags.ref) return null;
+        const lat = el.lat || el.center?.lat;
+        const lon = el.lon || el.center?.lon;
+        const dist = getDistance(userCoords, { latitude: lat, longitude: lon });
+        
+        let mode = 'Transit';
+        if (tags.highway === 'bus_stop') mode = 'Bus';
+        else if (tags.railway === 'tram_stop') mode = 'Tram';
+        else if (tags.railway === 'subway_entrance') mode = 'Metro';
+        else if (tags.railway === 'station') mode = 'Train';
+
+        return {
+            lat, lon, mode,
+            title: tags.name || `Line ${tags.ref}` || `${mode} Stop`,
+            detail: tags.route_ref ? `Routes: ${tags.route_ref}` : formatDistance(dist),
+            provider: tags.operator || 'Public',
+            eta: estimateWalk(dist),
+            status: 'Nearby',
+            _dist: dist
+        };
+    }).filter(Boolean).sort((a, b) => a._dist - b._dist);
+}
+
+function processPlaces(elements, userCoords) {
+    const groups = {
+        'food': { 
+            category: 'Food & Drink', 
+            description: 'Quick bites and local flavors.', 
+            match: 'cafe|restaurant|bar', 
+            items: [] 
+        },
+        'fun': { 
+            category: 'Parks & Recreation', 
+            description: 'Places to unwind and explore.', 
+            match: 'park|garden|museum', 
+            items: [] 
+        },
+        'service': { 
+            category: 'Mobility & Services', 
+            description: 'Travel helpers and essentials.', 
+            match: 'taxi|bicycle|bank', 
+            items: [] 
+        }
+    };
+
+    elements.forEach(el => {
+        const tags = el.tags || {};
+        if (!tags.name) return;
+        const lat = el.lat || el.center?.lat;
+        const lon = el.lon || el.center?.lon;
+        const dist = getDistance(userCoords, { latitude: lat, longitude: lon });
+        
+        let targetGroup = groups.service;
+        if (tags.amenity && groups.food.match.includes(tags.amenity)) targetGroup = groups.food;
+        else if (tags.leisure && groups.fun.match.includes(tags.leisure)) targetGroup = groups.fun;
+
+        targetGroup.items.push({
+            lat, lon, name: tags.name,
+            rating: estimateWalk(dist),
+            address: formatDistance(dist),
+            distance: formatDistance(dist),
+            _dist: dist
+        });
+    });
+
+    Object.keys(groups).forEach(key => groups[key].items.sort((a, b) => a._dist - b._dist));
+    return groups;
+}
+
+/**
+ * --- CONTROLLER ---
+ */
+async function loadDashboard(coords) {
+    STATE.userCoords = coords;
+    const { latitude, longitude } = coords;
+    const radius = 1000;
+
+    const transportQuery = `(
+        node["highway"="bus_stop"](around:${radius},${latitude},${longitude});
+        node["railway"~"tram_stop|subway_entrance|station"](around:${radius},${latitude},${longitude});
+    );`;
+
+    const placesQuery = `(
+        node["amenity"~"cafe|restaurant|bar|taxi|bicycle_rental"](around:${radius},${latitude},${longitude});
+        node["leisure"~"park|garden"](around:${radius},${latitude},${longitude});
+        node["tourism"="museum"](around:${radius},${latitude},${longitude});
+    );`;
+
+    try {
+        const transportTask = fetchOverpass(transportQuery).then(raw => {
+            STATE.transport.allItems = processTransport(raw, coords);
+            STATE.transport.currentIndex = 0;
+            renderTransportList();
+            return STATE.transport.allItems;
+        });
+
+        const placesTask = fetchOverpass(placesQuery).then(raw => {
+            STATE.places.groups = processPlaces(raw, coords);
+            Object.keys(STATE.places.groups).forEach(key => STATE.places.indexes[key] = 0);
+            renderPlacesList();
+            return STATE.places.groups;
+        });
+
+        await Promise.all([transportTask, placesTask]);
+        updateMapWithVisibleItems();
+
+    } catch (error) {
+        console.error('Dashboard load failed:', error);
+    }
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            pos => loadDashboard(pos.coords),
+            err => console.warn('No GPS:', err),
+            { enableHighAccuracy: true, timeout: 15000 }
+        );
+    }
 });

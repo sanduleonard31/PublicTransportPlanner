@@ -1,78 +1,108 @@
-const setText = (id, value) => {
+// --- CONFIGURATION & CONSTANTS ---
+
+const WEATHER_CODES = {
+  0: 'Clear', 1: 'Mostly clear', 2: 'Partly cloudy', 3: 'Overcast',
+  45: 'Fog', 48: 'Rime fog', 51: 'Light drizzle', 53: 'Drizzle',
+  55: 'Heavy drizzle', 61: 'Light rain', 63: 'Rain', 65: 'Heavy rain',
+  71: 'Snow', 80: 'Showers', 95: 'Thunder'
+};
+
+// --- HELPER FUNCTIONS ---
+
+// Update HTML text safely
+function setText(id, text) {
   const el = document.getElementById(id);
-  if (el) el.textContent = value;
-};
+  if (el) el.textContent = text;
+}
 
-const formatCoord = (value) => (Number.isFinite(value) ? value.toFixed(5) : '—');
+// Format coordinates to 5 decimal places
+function formatCoord(num) {
+  return Number.isFinite(num) ? num.toFixed(5) : '—';
+}
 
-const request = (url, params) => fetch(`${url}?${new URLSearchParams(params)}`).then((res) => {
-  if (!res.ok) throw new Error('Request failed');
+// Generic Fetcher (Replaces 'request')
+async function fetchJson(url, params) {
+  const fullUrl = `${url}?${new URLSearchParams(params)}`;
+  const res = await fetch(fullUrl);
+  if (!res.ok) throw new Error(`Failed to fetch ${url}`);
   return res.json();
-});
+}
 
-const describeWeather = (current) => {
+// Format Weather Data
+function formatWeather(current) {
   if (!current) return 'Weather unavailable';
-  const legend = {
-    0: 'Clear', 1: 'Mostly clear', 2: 'Partly cloudy', 3: 'Overcast', 45: 'Fog', 48: 'Rime fog',
-    51: 'Light drizzle', 53: 'Drizzle', 55: 'Heavy drizzle', 61: 'Light rain', 63: 'Rain', 65: 'Heavy rain',
-    71: 'Snow', 80: 'Showers', 95: 'Thunder'
-  };
-  const label = legend[current.weather_code] || 'Weather';
+  const label = WEATHER_CODES[current.weather_code] || 'Unknown';
   return `${label}, ${Math.round(current.temperature_2m)}°C, wind ${Math.round(current.wind_speed_10m)} km/h`;
-};
+}
 
-let timer;
+// Find the best available city name
+function getCityName(addr) {
+  return addr?.city || addr?.town || addr?.village || addr?.suburb || addr?.display_name || 'Unknown location';
+}
 
-const startClock = (timezone) => {
-  const update = () => setText('local-time', new Date().toLocaleTimeString('en-US', { timeZone: timezone }));
-  update();
-  if (timer) clearInterval(timer);
-  timer = setInterval(update, 1000);
-};
+// --- CORE LOGIC ---
 
-const handleSuccess = async ({ coords }) => {
+let clockTimer;
+
+function startClock(timezone) {
+  if (clockTimer) clearInterval(clockTimer);
+  
+  function tick() {
+    setText('local-time', new Date().toLocaleTimeString('en-US', { timeZone: timezone }));
+  }
+  
+  tick(); // Run immediately
+  clockTimer = setInterval(tick, 1000);
+}
+
+async function onLocationFound({ coords }) {
+  // 1. Show raw coordinates immediately
   setText('latitude', formatCoord(coords.latitude));
   setText('longitude', formatCoord(coords.longitude));
 
   try {
-    const [place, weather] = await Promise.all([
-      request('https://nominatim.openstreetmap.org/reverse', {
+    // 2. Fetch Data (Parallel Request)
+    const [geoData, weatherData] = await Promise.all([
+      fetchJson('https://nominatim.openstreetmap.org/reverse', {
         lat: coords.latitude,
         lon: coords.longitude,
         format: 'jsonv2'
       }),
-      request('https://api.open-meteo.com/v1/forecast', {
+      fetchJson('https://api.open-meteo.com/v1/forecast', {
         latitude: coords.latitude,
         longitude: coords.longitude,
         current: 'temperature_2m,weather_code,wind_speed_10m'
       })
     ]);
 
-    const timezone = place?.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    // 3. Process & Display
+    const timezone = geoData.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
+    
+    setText('location-name', getCityName(geoData.address));
+    setText('timezone', timezone);
+    setText('weather-summary', formatWeather(weatherData.current));
     startClock(timezone);
 
-    const name = place?.address?.city || place?.address?.town || place?.address?.village || place?.address?.suburb || place?.display_name || 'Unknown location';
-    setText('location-name', name);
-    setText('timezone', timezone);
-    setText('weather-summary', describeWeather(weather?.current));
   } catch (error) {
-    console.error(error);
+    console.warn('Data fetch failed:', error);
     setText('location-name', 'Location unavailable');
-    setText('timezone', '—');
     setText('weather-summary', 'Weather unavailable');
   }
 
   setText('last-updated', new Date().toLocaleString());
-};
+}
 
-const handleError = () => alert('Sorry, no position available. Please enable location services.');
+function onLocationError() {
+  alert('Please enable location services to use this app.');
+}
+
+// --- INITIALIZATION ---
 
 if (navigator.geolocation) {
-  navigator.geolocation.getCurrentPosition(handleSuccess, handleError, {
+  navigator.geolocation.getCurrentPosition(onLocationFound, onLocationError, {
     enableHighAccuracy: true,
-    timeout: 10000,
-    maximumAge: 0
+    timeout: 10000
   });
 } else {
-  alert('Geolocation is not supported by this browser.');
+  alert('Geolocation not supported.');
 }
