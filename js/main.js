@@ -73,21 +73,19 @@ window.switchTab = function(tabName) {
 window.nextTransport = function() {
     playSound('tap');
     const visible = getVisibleTransportItems();
-    STATE.transport.currentIndex = (STATE.transport.currentIndex + PAGE_SIZE) % Math.max(visible.length, 1);
-    renderTransportList();
-    updateMapWithVisibleItems();
+    const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+    const currentPage = Math.floor(STATE.transport.currentIndex / PAGE_SIZE) + 1;
+    const nextPage = currentPage >= totalPages ? 1 : currentPage + 1;
+    goToTransportPage(nextPage);
 };
 
 window.nextPlaceGroup = function(categoryKey) {
     playSound('tap');
-    STATE.places.indexes[categoryKey] += PAGE_SIZE;
-    const groupItems = STATE.places.groups[categoryKey].items;
-    
-    if (STATE.places.indexes[categoryKey] >= groupItems.length) {
-        STATE.places.indexes[categoryKey] = 0;
-    }
-    renderPlacesList();
-    updateMapWithVisibleItems();
+    const groupItems = STATE.places.groups[categoryKey]?.items || [];
+    const totalPages = Math.max(1, Math.ceil(groupItems.length / PAGE_SIZE));
+    const currentPage = Math.floor((STATE.places.indexes[categoryKey] || 0) / PAGE_SIZE) + 1;
+    const nextPage = currentPage >= totalPages ? 1 : currentPage + 1;
+    goToPlacesPage(categoryKey, nextPage);
 };
 
 /**
@@ -106,7 +104,7 @@ function updateMapWithVisibleItems() {
     else if (STATE.currentTab === 'places') {
         Object.keys(STATE.places.groups).forEach(key => {
             const group = STATE.places.groups[key];
-            const start = STATE.places.indexes[key];
+            const start = STATE.places.indexes[key] || 0;
             targetsToDraw = targetsToDraw.concat(group.items.slice(start, start + PAGE_SIZE));
         });
     }
@@ -125,7 +123,11 @@ function renderTransportList() {
     if (!container) return;
 
     const visibleItems = getVisibleTransportItems();
-    const start = STATE.transport.currentIndex;
+    const totalPages = Math.max(1, Math.ceil(visibleItems.length / PAGE_SIZE));
+    const maxStart = (totalPages - 1) * PAGE_SIZE;
+    const start = Math.min(STATE.transport.currentIndex, maxStart);
+    STATE.transport.currentIndex = start;
+    const currentPage = Math.floor(start / PAGE_SIZE) + 1;
     const batch = visibleItems.slice(start, start + PAGE_SIZE);
 
     if (batch.length === 0) {
@@ -153,14 +155,8 @@ function renderTransportList() {
         </article>`;
     }).join('');
 
-    let buttonHtml = '';
-    if (visibleItems.length > PAGE_SIZE) {
-        buttonHtml = `<div style="grid-column: 1 / -1; text-align: center;">
-            <button class="next-btn" onclick="nextTransport()">Show Next ${PAGE_SIZE} ⟳</button>
-        </div>`;
-    }
-
-    container.innerHTML = cardsHtml + buttonHtml;
+    const paginationHtml = renderTransportPagination(currentPage, totalPages);
+    container.innerHTML = cardsHtml + paginationHtml;
 }
 
 function renderPlacesList() {
@@ -169,7 +165,11 @@ function renderPlacesList() {
 
     const groupsHtml = Object.keys(STATE.places.groups).map(key => {
         const group = STATE.places.groups[key];
-        const currentIndex = STATE.places.indexes[key];
+        const totalPages = Math.max(1, Math.ceil(group.items.length / PAGE_SIZE));
+        const maxStart = (totalPages - 1) * PAGE_SIZE;
+        const currentIndex = Math.min(STATE.places.indexes[key] || 0, maxStart);
+        STATE.places.indexes[key] = currentIndex;
+        const currentPage = Math.floor(currentIndex / PAGE_SIZE) + 1;
         const batch = group.items.slice(currentIndex, currentIndex + PAGE_SIZE);
 
         if (batch.length === 0) return '';
@@ -189,22 +189,111 @@ function renderPlacesList() {
             </li>`;
         }).join('');
 
-        let nextBtn = '';
-        if (group.items.length > PAGE_SIZE) {
-            nextBtn = `<button class="next-link" onclick="nextPlaceGroup('${key}')">Show Next ${PAGE_SIZE} ⟳</button>`;
-        }
+        const paginationBar = renderPlacesPagination(key, currentPage, totalPages);
 
         return `
         <article class="card">
             <h4 class="card-title">${group.category} 🎵</h4>
             <p class="card-text">${group.description}</p>
             <ul class="card-list">${listItems}</ul>
-            ${nextBtn}
+            ${paginationBar}
         </article>`;
     }).join('');
 
     container.innerHTML = groupsHtml;
 }
+
+function buildPaginationSequence(currentPage, totalPages) {
+    if (totalPages <= 7) {
+        return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+
+    const sequence = [];
+    const addPage = (page) => {
+        if (page >= 1 && page <= totalPages && !sequence.includes(page)) {
+            sequence.push(page);
+        }
+    };
+
+    addPage(1);
+    addPage(2);
+
+    if (currentPage > 4) sequence.push('ellipsis-left');
+
+    addPage(currentPage - 1);
+    addPage(currentPage);
+    addPage(currentPage + 1);
+
+    if (currentPage < totalPages - 3) sequence.push('ellipsis-right');
+
+    addPage(totalPages - 1);
+    addPage(totalPages);
+
+    return sequence;
+}
+
+function renderTransportPagination(currentPage, totalPages) {
+    if (totalPages <= 1) return '';
+    const sequence = buildPaginationSequence(currentPage, totalPages);
+    const selectOptions = Array.from({ length: totalPages }, (_, i) => {
+        const pageNum = i + 1;
+        return `<option value="${pageNum}" ${pageNum === currentPage ? 'selected' : ''}>Page ${pageNum} of ${totalPages}</option>`;
+    }).join('');
+
+    const buttons = sequence.map(entry => {
+        if (entry === 'ellipsis-left' || entry === 'ellipsis-right') {
+            return `<select class="page-select" aria-label="Jump to transport page" onchange="goToTransportPage(Number(this.value))">${selectOptions}</select>`;
+        }
+        const isActive = entry === currentPage;
+        return `<button class="page-btn ${isActive ? 'is-active' : ''}" type="button" onclick="goToTransportPage(${entry})">${entry}</button>`;
+    }).join('');
+
+    return `<div class="pagination-bar" aria-label="Transport pagination">${buttons}</div>`;
+}
+
+function renderPlacesPagination(groupKey, currentPage, totalPages) {
+    if (totalPages <= 1) return '';
+    const sequence = buildPaginationSequence(currentPage, totalPages);
+    const selectOptions = Array.from({ length: totalPages }, (_, i) => {
+        const pageNum = i + 1;
+        return `<option value="${pageNum}" ${pageNum === currentPage ? 'selected' : ''}>Page ${pageNum} of ${totalPages}</option>`;
+    }).join('');
+
+    const buttons = sequence.map(entry => {
+        if (entry === 'ellipsis-left' || entry === 'ellipsis-right') {
+            return `<select class="page-select" aria-label="Jump to ${groupKey} page" onchange="goToPlacesPage('${groupKey}', Number(this.value))">${selectOptions}</select>`;
+        }
+        const isActive = entry === currentPage;
+        return `<button class="page-btn ${isActive ? 'is-active' : ''}" type="button" onclick="goToPlacesPage('${groupKey}', ${entry})">${entry}</button>`;
+    }).join('');
+
+    return `<div class="pagination-bar" aria-label="${groupKey} pagination">${buttons}</div>`;
+}
+
+function clampPage(page, totalPages) {
+    const parsedPage = Number(page);
+    const safePage = Number.isFinite(parsedPage) ? parsedPage : 1;
+    return Math.min(Math.max(1, Math.floor(safePage)), totalPages);
+}
+
+window.goToTransportPage = function(page) {
+    const visible = getVisibleTransportItems();
+    const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+    const targetPage = clampPage(page, totalPages);
+    STATE.transport.currentIndex = (targetPage - 1) * PAGE_SIZE;
+    renderTransportList();
+    updateMapWithVisibleItems();
+};
+
+window.goToPlacesPage = function(groupKey, page) {
+    const group = STATE.places.groups[groupKey];
+    if (!group) return;
+    const totalPages = Math.max(1, Math.ceil(group.items.length / PAGE_SIZE));
+    const targetPage = clampPage(page, totalPages);
+    STATE.places.indexes[groupKey] = (targetPage - 1) * PAGE_SIZE;
+    renderPlacesList();
+    updateMapWithVisibleItems();
+};
 
 /**
  * --- HELPERS ---
