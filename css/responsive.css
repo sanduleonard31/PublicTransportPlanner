@@ -55,4 +55,16 @@
     .card-grid {
         grid-template-columns: 1fr;
     }
+
+    .control-panel {
+        grid-template-columns: 1fr;
+    }
+
+    .sorter {
+        justify-self: start;
+    }
+
+    .stats-grid {
+        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    }
 }

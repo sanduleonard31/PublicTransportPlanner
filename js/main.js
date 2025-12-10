@@ -4,8 +4,13 @@
 const STATE = {
     userCoords: null,
     currentTab: 'transport',
-    transport: { allItems: [], currentIndex: 0 },
-    places: { groups: {}, indexes: {} }
+    transport: { 
+        allItems: [], 
+        currentIndex: 0,
+        filters: { modes: new Set(['all']), sortBy: 'distance' }
+    },
+    places: { groups: {}, indexes: {} },
+    favorites: []
 };
 
 const playSound = (name) => {
@@ -14,6 +19,7 @@ const playSound = (name) => {
 };
 
 const PAGE_SIZE = 5;
+const FAVORITES_KEY = 'ptp:favorites';
 
 /**
  * --- INTERACTION HANDLERS ---
@@ -63,10 +69,8 @@ window.switchTab = function(tabName) {
 
 window.nextTransport = function() {
     playSound('tap');
-    STATE.transport.currentIndex += PAGE_SIZE;
-    if (STATE.transport.currentIndex >= STATE.transport.allItems.length) {
-        STATE.transport.currentIndex = 0;
-    }
+    const visible = getVisibleTransportItems();
+    STATE.transport.currentIndex = (STATE.transport.currentIndex + PAGE_SIZE) % Math.max(visible.length, 1);
     renderTransportList();
     updateMapWithVisibleItems();
 };
@@ -93,7 +97,8 @@ function updateMapWithVisibleItems() {
 
     if (STATE.currentTab === 'transport') {
         const start = STATE.transport.currentIndex;
-        targetsToDraw = STATE.transport.allItems.slice(start, start + PAGE_SIZE);
+        const visible = getVisibleTransportItems();
+        targetsToDraw = visible.slice(start, start + PAGE_SIZE);
     } 
     else if (STATE.currentTab === 'places') {
         Object.keys(STATE.places.groups).forEach(key => {
@@ -116,17 +121,21 @@ function renderTransportList() {
     const container = document.getElementById('transport-cards');
     if (!container) return;
 
+    const visibleItems = getVisibleTransportItems();
     const start = STATE.transport.currentIndex;
-    const batch = STATE.transport.allItems.slice(start, start + PAGE_SIZE);
+    const batch = visibleItems.slice(start, start + PAGE_SIZE);
 
     if (batch.length === 0) {
-        container.innerHTML = '<p style="opacity:0.6;">No transport found.</p>';
+        container.innerHTML = '<p style="opacity:0.6;">No transport found. Try broadening filters or refreshing your location.</p>';
         return;
     }
 
-    const cardsHtml = batch.map(item => `
+    const cardsHtml = batch.map(item => {
+        const key = buildItemKey(item);
+        const isFav = isFavorite(key);
+        return `
         <article class="card" style="cursor: pointer;" 
-            onclick="selectLocation('${item.mode}', ${item.lat}, ${item.lon}, '${item.title}', '${formatDistance(item._dist)}', '${item.eta}')">
+            onclick="selectLocation('${item.mode}', ${item.lat}, ${item.lon}, '${item.title.replace(/'/g, "\\'")}', '${formatDistance(item._dist)}', '${item.eta}')">
             <div class="card-header">
                 <span class="card-badge">${item.mode}</span>
                 <span class="card-status">${item.status}</span>
@@ -137,11 +146,12 @@ function renderTransportList() {
                 <span class="card-tag">${item.provider}</span>
                 <span class="card-tag">${item.eta}</span>
             </div>
-        </article>
-    `).join('');
+            <button class="ghost-btn fav-btn ${isFav ? 'is-active' : ''}" type="button" onclick="event.stopPropagation(); toggleFavoriteFromCard('${key}')">${isFav ? 'Saved' : 'Save stop'}</button>
+        </article>`;
+    }).join('');
 
     let buttonHtml = '';
-    if (STATE.transport.allItems.length > PAGE_SIZE) {
+    if (visibleItems.length > PAGE_SIZE) {
         buttonHtml = `<div style="grid-column: 1 / -1; text-align: center;">
             <button class="next-btn" onclick="nextTransport()">Show Next ${PAGE_SIZE} ⟳</button>
         </div>`;
@@ -163,6 +173,8 @@ function renderPlacesList() {
 
         const listItems = batch.map(item => {
             const safeName = item.name.replace(/'/g, "\\'");
+            const key = buildItemKey({ mode: group.category, lat: item.lat, lon: item.lon });
+            const isFav = isFavorite(key);
             return `
             <li style="cursor: pointer;" onclick="event.stopPropagation(); selectLocation('${group.category}', ${item.lat}, ${item.lon}, '${safeName}', '${item.distance}', '${item.rating}')">
                 <div class="card-header">
@@ -170,6 +182,7 @@ function renderPlacesList() {
                     <span class="card-tag">${item.rating}</span>
                 </div>
                 <p class="card-text">${item.address} - ${item.distance}</p>
+                <button class="ghost-btn fav-btn ${isFav ? 'is-active' : ''}" type="button" onclick="event.stopPropagation(); toggleFavoriteFromPlace('${safeName}', '${group.category}', ${item.lat}, ${item.lon}, '${item.distance}', '${item.rating}')">${isFav ? 'Saved' : 'Save visit'}</button>
             </li>`;
         }).join('');
 
@@ -193,6 +206,31 @@ function renderPlacesList() {
 /**
  * --- HELPERS ---
  */
+function buildItemKey(item) {
+    return `${item.mode}-${item.lat}-${item.lon}`;
+}
+
+function isFavorite(key) {
+    return STATE.favorites.some(f => f.key === key);
+}
+
+function getVisibleTransportItems() {
+    const modes = STATE.transport.filters.modes;
+    let list = [...STATE.transport.allItems];
+
+    if (!modes.has('all')) {
+        list = list.filter(item => modes.has(item.mode.toLowerCase()));
+    }
+
+    if (STATE.transport.filters.sortBy === 'eta') {
+        list.sort((a, b) => estimateMinutesFromDistance(a._dist) - estimateMinutesFromDistance(b._dist));
+    } else {
+        list.sort((a, b) => a._dist - b._dist);
+    }
+
+    return list;
+}
+
 function getDistance(origin, target) {
     if (!origin || !target) return Infinity;
     const R = 6371000; 
@@ -204,6 +242,7 @@ function getDistance(origin, target) {
 }
 function formatDistance(m) { return m === Infinity ? '—' : (m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(1) + ' km'); }
 function estimateWalk(m) { return m === Infinity ? '—' : '~' + Math.max(1, Math.round(m / 80)) + ' min walk'; }
+function estimateMinutesFromDistance(m) { return m === Infinity ? Infinity : Math.max(1, Math.round(m / 80)); }
 
 function fetchOverpass(query) {
     return fetch('https://overpass-api.de/api/interpreter', {
@@ -325,7 +364,120 @@ async function loadDashboard(coords) {
     }
 }
 
+function toggleModeFilter(mode) {
+    playSound('tap');
+    if (mode === 'all') {
+        STATE.transport.filters.modes = new Set(['all']);
+    } else {
+        STATE.transport.filters.modes = new Set([mode]);
+    }
+    STATE.transport.currentIndex = 0;
+    syncFilterButtons();
+    renderTransportList();
+    updateMapWithVisibleItems();
+}
+
+function syncFilterButtons() {
+    const modes = STATE.transport.filters.modes;
+    document.querySelectorAll('[data-mode-filter]').forEach(btn => {
+        const key = btn.getAttribute('data-mode-filter');
+        const active = modes.has('all') ? key === 'all' : modes.has(key);
+        btn.classList.toggle('active', active);
+    });
+}
+
+function changeTransportSort(value) {
+    STATE.transport.filters.sortBy = value;
+    STATE.transport.currentIndex = 0;
+    renderTransportList();
+    updateMapWithVisibleItems();
+}
+
+function toggleFavoriteFromCard(key) {
+    const item = STATE.transport.allItems.find(entry => buildItemKey(entry) === key);
+    if (!item) return;
+    toggleFavorite(item);
+}
+
+function toggleFavoriteFromPlace(title, category, lat, lon, distance, eta) {
+    const item = { title, mode: category, lat, lon, distance, eta };
+    toggleFavorite(item);
+}
+
+function toggleFavorite(item) {
+    const key = buildItemKey(item);
+    const existingIndex = STATE.favorites.findIndex(f => f.key === key);
+    const distanceText = item.distance || (Number.isFinite(item._dist) ? formatDistance(item._dist) : '—');
+    const etaText = item.eta || (Number.isFinite(item._dist) ? estimateWalk(item._dist) : '—');
+    if (existingIndex >= 0) {
+        STATE.favorites.splice(existingIndex, 1);
+    } else {
+        STATE.favorites.push({ key, title: item.title, mode: item.mode, lat: item.lat, lon: item.lon, distance: distanceText, eta: etaText });
+    }
+    persistFavorites();
+    renderTransportList();
+    renderFavorites();
+}
+
+function renderFavorites() {
+    const section = document.getElementById('favorites-section');
+    const list = document.getElementById('favorites-list');
+    if (!section || !list) return;
+
+    if (STATE.favorites.length === 0) {
+        section.style.display = 'none';
+        list.innerHTML = '';
+        return;
+    }
+
+    section.style.display = 'block';
+    list.innerHTML = STATE.favorites.map(f => `
+        <button class="pill" onclick="selectLocation('${f.mode}', ${f.lat}, ${f.lon}, '${f.title.replace(/'/g, "\\'")}', '${f.distance}', '${f.eta}')">${f.mode} · ${f.title} · ${f.distance}</button>
+    `).join('');
+}
+
+function persistFavorites() {
+    try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(STATE.favorites)); } catch (_) { /* ignore */ }
+}
+
+function loadFavorites() {
+    try {
+        const saved = localStorage.getItem(FAVORITES_KEY);
+        if (saved) STATE.favorites = JSON.parse(saved);
+    } catch (_) {
+        STATE.favorites = [];
+    }
+    renderFavorites();
+}
+
+function clearFavorites() {
+    STATE.favorites = [];
+    persistFavorites();
+    renderFavorites();
+}
+
+function requestLocationUpdate() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(
+        pos => {
+            STATE.transport.currentIndex = 0;
+            loadDashboard(pos.coords);
+            if (window.onLocationFound) {
+                window.onLocationFound({ coords: pos.coords });
+            }
+        },
+        err => console.warn('Refresh location failed:', err),
+        { enableHighAccuracy: true, timeout: 15000 }
+    );
+}
+
 document.addEventListener('DOMContentLoaded', function() {
+    const refreshBtn = document.getElementById('refresh-location');
+    if (refreshBtn) refreshBtn.addEventListener('click', requestLocationUpdate);
+
+    loadFavorites();
+    syncFilterButtons();
+
     if (navigator.geolocation) {
         navigator.geolocation.getCurrentPosition(
             pos => loadDashboard(pos.coords),
