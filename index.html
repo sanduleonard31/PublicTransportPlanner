@@ -16,6 +16,22 @@
             <h1>Discover the best way to arrive where you need to be!</h1>
         </section>
 
+        <section class="music-banner" aria-label="Lofi background music player">
+            <div class="music-meta">
+                <p class="eyebrow">Background Lofi</p>
+                <h3 id="music-title">Curating a calm stream</h3>
+                <p class="muted" id="music-source">Powered by Radio Browser API · click to start</p>
+            </div>
+            <div class="music-controls">
+                <button class="music-toggle" id="music-toggle" type="button" aria-pressed="false">
+                    <span class="dot" aria-hidden="true"></span>
+                    <span class="label">Play</span>
+                    <span class="sub" id="music-state">Ready</span>
+                </button>
+                <span class="music-status" id="music-status">Lofi stream is paused</span>
+            </div>
+        </section>
+
         <section class="content">
             <article class="info-column glassomorphic">
                 <h2>Info</h2>
@@ -64,5 +80,7 @@
 <script src="./js/footer.js"></script>
 <script src="./js/draw-map.js"></script>
 <script src="./js/get-location.js"></script>
+<script src="./js/sound.js"></script>
+<script src="./js/music.js"></script>
 <script src="./js/main.js"></script>
 </html>

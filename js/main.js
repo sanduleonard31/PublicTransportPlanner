@@ -8,12 +8,18 @@ const STATE = {
     places: { groups: {}, indexes: {} }
 };
 
+const playSound = (name) => {
+    const fx = window.soundFX;
+    if (fx && typeof fx[name] === 'function') fx[name]();
+};
+
 const PAGE_SIZE = 5;
 
 /**
  * --- INTERACTION HANDLERS ---
  */
 window.selectLocation = function(category, lat, lon, title, dist, eta) {
+    playSound('select');
     
     // 1. Highlight Map Route
     if (window.highlightRoute) window.highlightRoute(lat, lon);
@@ -29,6 +35,7 @@ window.selectLocation = function(category, lat, lon, title, dist, eta) {
 };
 
 window.switchTab = function(tabName) {
+    playSound('tab');
     STATE.currentTab = tabName;
 
     // Toggle HTML Visibility
@@ -55,6 +62,7 @@ window.switchTab = function(tabName) {
 };
 
 window.nextTransport = function() {
+    playSound('tap');
     STATE.transport.currentIndex += PAGE_SIZE;
     if (STATE.transport.currentIndex >= STATE.transport.allItems.length) {
         STATE.transport.currentIndex = 0;
@@ -64,6 +72,7 @@ window.nextTransport = function() {
 };
 
 window.nextPlaceGroup = function(categoryKey) {
+    playSound('tap');
     STATE.places.indexes[categoryKey] += PAGE_SIZE;
     const groupItems = STATE.places.groups[categoryKey].items;
     

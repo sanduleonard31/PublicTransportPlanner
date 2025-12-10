@@ -96,6 +96,120 @@ footer {
     box-shadow: 0 16px 32px var(--shadow);
 }
 
+/* --- LOFI MUSIC PLAYER --- */
+.music-banner {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: center;
+    gap: var(--spacing-medium);
+    padding: var(--spacing-large);
+    margin: 0 0 var(--spacing-large);
+    border-radius: var(--border-radius);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: linear-gradient(120deg, rgba(25, 53, 90, 0.75), rgba(101, 129, 179, 0.55));
+    color: #f6f8fb;
+    box-shadow: 0 12px 30px var(--shadow);
+    position: relative;
+    overflow: hidden;
+}
+
+.music-banner::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(circle at 20% 20%, rgba(255, 255, 255, 0.16), transparent 45%),
+                radial-gradient(circle at 80% 10%, rgba(255, 255, 255, 0.12), transparent 40%);
+    pointer-events: none;
+}
+
+.music-meta {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: calc(var(--spacing-small) * 0.5);
+}
+
+.music-meta .eyebrow {
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: var(--font-size-small);
+    opacity: 0.85;
+}
+
+.music-meta h3 {
+    margin: 0;
+    font-size: var(--font-size-xlarge);
+    letter-spacing: 0.01em;
+}
+
+.music-meta .muted {
+    margin: 0;
+    opacity: 0.82;
+    line-height: var(--line-height-medium);
+}
+
+.music-controls {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    gap: var(--spacing-small);
+    justify-items: end;
+    text-align: right;
+}
+
+.music-status {
+    font-size: var(--font-size-small);
+    opacity: 0.9;
+}
+
+.music-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--spacing-small);
+    padding: var(--spacing-medium) var(--spacing-large);
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    background: rgba(255, 255, 255, 0.12);
+    color: #f6f8fb;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    cursor: pointer;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+}
+
+.music-toggle:hover {
+    transform: translateY(-2px);
+    background: rgba(255, 255, 255, 0.18);
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.3);
+}
+
+.music-toggle:active {
+    transform: translateY(0);
+}
+
+.music-toggle .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: #f97316;
+    box-shadow: 0 0 14px rgba(249, 115, 22, 0.8);
+}
+
+.music-toggle.is-playing .dot {
+    background: #22c55e;
+    box-shadow: 0 0 14px rgba(34, 197, 94, 0.9);
+}
+
+.music-toggle .label {
+    font-size: var(--font-size-medium);
+}
+
+.music-toggle .sub {
+    font-size: var(--font-size-small);
+    opacity: 0.85;
+}
+
 .card-header {
     display: flex;
     align-items: center;
