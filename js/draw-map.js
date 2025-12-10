@@ -1,5 +1,6 @@
 // GLOBAL STATE
 let globalUserCoords = null;
+let activeRouteLine = null;
 
 function loadLeaflet() {
     if (window.L) return Promise.resolve();
@@ -32,6 +33,44 @@ function initMap(container, coords) {
     globalUserCoords = coords;
 }
 
+async function fetchRoute(start, end) {
+    const endpoints = [
+        // OSM community routing (foot profile)
+        `https://routing.openstreetmap.de/routed-foot/route/v1/foot/${start.longitude},${start.latitude};${end.lon},${end.lat}?overview=full&geometries=geojson`,
+        // Public OSRM fallback
+        `https://router.project-osrm.org/route/v1/foot/${start.longitude},${start.latitude};${end.lon},${end.lat}?overview=full&geometries=geojson`
+    ];
+
+    let lastErr;
+    for (const url of endpoints) {
+        try {
+            const res = await fetch(url);
+            if (!res.ok) throw new Error(`Route request failed: ${res.status}`);
+            const data = await res.json();
+            const geometry = data.routes?.[0]?.geometry;
+            if (!geometry?.coordinates) throw new Error('No route geometry');
+            // OSRM returns [lon, lat]; Leaflet expects [lat, lon]
+            return geometry.coordinates.map(([lon, lat]) => [lat, lon]);
+        } catch (err) {
+            lastErr = err;
+        }
+    }
+    throw lastErr || new Error('Routing unavailable');
+}
+
+function drawRouteLine(map, latLngs) {
+    if (activeRouteLine) {
+        activeRouteLine.remove();
+        activeRouteLine = null;
+    }
+    activeRouteLine = L.polyline(latLngs, {
+        color: '#3b82f6',
+        weight: 5,
+        opacity: 0.85,
+        lineCap: 'round'
+    }).addTo(map);
+}
+
 window.highlightRoute = function(targetLat, targetLon) {
     const mapContainer = document.getElementById('map');
     const map = mapContainer ? mapContainer._leafletInstance : null;
@@ -40,9 +79,19 @@ window.highlightRoute = function(targetLat, targetLon) {
     const bounds = L.latLngBounds([[globalUserCoords.latitude, globalUserCoords.longitude], [targetLat, targetLon]]);
     map.flyToBounds(bounds, { padding: [80, 80], duration: 1.5 });
 
+    // Draw straight connection instantly for feedback
     if (window.drawConnections) {
         window.drawConnections(globalUserCoords, [{ lat: targetLat, lon: targetLon }]);
     }
+
+    // Fetch shortest walking path and draw polyline
+    fetchRoute(globalUserCoords, { lat: targetLat, lon: targetLon })
+        .then(coords => {
+            drawRouteLine(map, coords);
+        })
+        .catch(err => {
+            console.warn('Route unavailable:', err);
+        });
 };
 
 window.drawConnections = function(userCoords, destinations) {
@@ -89,25 +138,20 @@ window.drawConnections = function(userCoords, destinations) {
             const destX = destPoint.x - topLeft.x;
             const destY = destPoint.y - topLeft.y;
 
-            // Draw Line
-            ctx.beginPath();
-            ctx.moveTo(userX, userY);
-            ctx.lineTo(destX, destY);
-
             const isSingleFocus = (destinations.length === 1);
-            if (isSingleFocus) {
-                ctx.strokeStyle = '#3b82f6'; 
-                ctx.lineWidth = 4;
-            } else {
+            if (!isSingleFocus) {
+                ctx.beginPath();
+                ctx.moveTo(userX, userY);
+                ctx.lineTo(destX, destY);
                 const grad = ctx.createLinearGradient(userX, userY, destX, destY);
                 grad.addColorStop(0, 'rgba(59, 130, 246, 0.5)');
                 grad.addColorStop(1, 'rgba(59, 130, 246, 0.0)');
                 ctx.strokeStyle = grad;
                 ctx.lineWidth = 2;
+                ctx.stroke();
             }
-            ctx.stroke();
 
-            // Dot
+            // Dot only
             ctx.beginPath();
             ctx.arc(destX, destY, isSingleFocus ? 8 : 4, 0, 2 * Math.PI);
             ctx.fillStyle = '#ff4757';

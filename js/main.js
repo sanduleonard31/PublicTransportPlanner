@@ -10,7 +10,8 @@ const STATE = {
         filters: { modes: new Set(['all']), sortBy: 'distance' }
     },
     places: { groups: {}, indexes: {} },
-    favorites: []
+    favorites: [],
+    lastSelection: null
 };
 
 const playSound = (name) => {
@@ -20,12 +21,14 @@ const playSound = (name) => {
 
 const PAGE_SIZE = 5;
 const FAVORITES_KEY = 'ptp:favorites';
+const DEFAULT_SEARCH_RADIUS = 20000;
 
 /**
  * --- INTERACTION HANDLERS ---
  */
 window.selectLocation = function(category, lat, lon, title, dist, eta) {
     playSound('select');
+    STATE.lastSelection = { category, lat, lon, title, dist, eta };
     
     // 1. Highlight Map Route
     if (window.highlightRoute) window.highlightRoute(lat, lon);
@@ -328,7 +331,7 @@ function processPlaces(elements, userCoords) {
 async function loadDashboard(coords) {
     STATE.userCoords = coords;
     const { latitude, longitude } = coords;
-    const radius = 1000;
+    const radius = DEFAULT_SEARCH_RADIUS;
 
     const transportQuery = `(
         node["highway"="bus_stop"](around:${radius},${latitude},${longitude});
@@ -459,11 +462,17 @@ function clearFavorites() {
 function requestLocationUpdate() {
     if (!navigator.geolocation) return;
     navigator.geolocation.getCurrentPosition(
-        pos => {
+        async pos => {
             STATE.transport.currentIndex = 0;
-            loadDashboard(pos.coords);
+            await loadDashboard(pos.coords);
             if (window.onLocationFound) {
                 window.onLocationFound({ coords: pos.coords });
+            }
+
+            // Re-apply last selection after fresh data
+            if (STATE.lastSelection) {
+                const sel = STATE.lastSelection;
+                selectLocation(sel.category, sel.lat, sel.lon, sel.title, sel.dist, sel.eta);
             }
         },
         err => console.warn('Refresh location failed:', err),
