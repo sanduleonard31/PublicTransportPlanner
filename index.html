@@ -81,30 +81,23 @@
 
                 <section class="control-panel">
                     <div class="filter-group" role="group" aria-label="Transport filters">
-                        <button class="pill active" data-mode-filter="all" onclick="toggleModeFilter('all')">All</button>
-                        <button class="pill" data-mode-filter="bus" onclick="toggleModeFilter('bus')">Bus</button>
-                        <button class="pill" data-mode-filter="tram" onclick="toggleModeFilter('tram')">Tram</button>
-                        <button class="pill" data-mode-filter="metro" onclick="toggleModeFilter('metro')">Metro</button>
-                        <button class="pill" data-mode-filter="train" onclick="toggleModeFilter('train')">Train</button>
+                        <button class="pill active" data-mode-filter="all">All</button>
+                        <button class="pill" data-mode-filter="bus">Bus</button>
+                        <button class="pill" data-mode-filter="tram">Tram</button>
+                        <button class="pill" data-mode-filter="metro">Metro</button>
+                        <button class="pill" data-mode-filter="train">Train</button>
                     </div>
-                    <label class="sorter" aria-label="Sort transport">
-                        <span class="muted">Sort by</span>
-                        <select id="transport-sort" onchange="changeTransportSort(this.value)">
-                            <option value="distance" selected>Closest first</option>
-                            <option value="eta">ETA (walk)</option>
-                        </select>
-                    </label>
                 </section>
 
                 <div class="tabs-container">
-                    <button class="tab-btn active" onclick="switchTab('transport')">Transport</button>
-                    <button class="tab-btn" onclick="switchTab('places')">Visits</button>
+                    <button class="tab-btn active" data-tab="transport">Transport</button>
+                    <button class="tab-btn" data-tab="places">Visits</button>
                 </div>
 
                 <section id="favorites-section" class="favorites glassomorphic" style="display: none;">
                     <div class="favorites-header">
                         <h4 class="card-title">Saved picks</h4>
-                        <button class="ghost-btn" type="button" onclick="clearFavorites()">Clear all</button>
+                        <button class="ghost-btn" type="button" data-action="clear-favorites">Clear all</button>
                     </div>
                     <div id="favorites-list" class="pill-rail" aria-live="polite"></div>
                 </section>
@@ -131,5 +124,7 @@
 <script src="./js/get-location.js"></script>
 <script src="./js/sound.js"></script>
 <script src="./js/music.js"></script>
+<script src="./js/state.js"></script>
+<script src="./js/render.js"></script>
 <script src="./js/main.js"></script>
 </html>

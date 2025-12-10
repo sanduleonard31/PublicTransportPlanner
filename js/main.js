@@ -1,586 +1,197 @@
-/**
- * --- GLOBAL STATE ---
- */
-const STATE = {
-    userCoords: null,
-    currentTab: 'transport',
-    transport: { 
-        allItems: [], 
-        currentIndex: 0,
-        filters: { modes: new Set(['all']), sortBy: 'distance' }
-    },
-    places: { groups: {}, indexes: {} },
-    favorites: [],
-    lastSelection: null
-};
+(() => {
+  const App = window.App || {};
+  const { state, helpers, render } = App;
+  if (!state || !helpers || !render) return;
 
-const playSound = (name) => {
-    const fx = window.soundFX;
-    if (fx && typeof fx[name] === 'function') fx[name]();
-};
+  const transportQuery = ({ latitude, longitude }) => `(
+    node["highway"="bus_stop"](around:${helpers.DEFAULT_RADIUS},${latitude},${longitude});
+    node["railway"~"tram_stop|subway_entrance|station"](around:${helpers.DEFAULT_RADIUS},${latitude},${longitude});
+  );`;
 
-const PAGE_SIZE = 5;
-const FAVORITES_KEY = 'ptp:favorites';
-const DEFAULT_SEARCH_RADIUS = 20000;
+  const placesQuery = ({ latitude, longitude }) => `(
+    node["amenity"~"cafe|restaurant|bar"](around:${helpers.DEFAULT_RADIUS},${latitude},${longitude});
+    node["leisure"~"park|garden"](around:${helpers.DEFAULT_RADIUS},${latitude},${longitude});
+    node["tourism"="museum"](around:${helpers.DEFAULT_RADIUS},${latitude},${longitude});
+  );`;
 
-/**
- * --- INTERACTION HANDLERS ---
- */
-window.selectLocation = function(category, lat, lon, title, dist, eta) {
-    playSound('select');
-    STATE.lastSelection = { category, lat, lon, title, dist, eta };
-    
-    // 1. Highlight Map Route
-    if (window.highlightRoute) window.highlightRoute(lat, lon);
+  const fetchOverpass = query => fetch('https://overpass-api.de/api/interpreter', {
+    method: 'POST',
+    body: `[out:json][timeout:20];${query}out center 40;`
+  }).then(res => res.json()).then(data => data.elements || []);
 
-    // 2. Update Trip Info Box
-    const detailsBox = document.getElementById('trip-details');
-    if (detailsBox) {
-        detailsBox.style.display = 'block';
-        document.getElementById('trip-name').textContent = title;
-        document.getElementById('trip-distance').textContent = dist;
-        document.getElementById('trip-eta').textContent = eta;
-    }
-};
+  const normalizeTransport = (elements, coords) => elements.map(el => {
+    const tags = el.tags || {};
+    const lat = el.lat || el.center?.lat;
+    const lon = el.lon || el.center?.lon;
+    if (!lat || !lon) return null;
+    if (!tags.name && !tags.ref) return null;
+    const dist = helpers.distance(coords, { latitude: lat, longitude: lon });
+    const mode = tags.highway === 'bus_stop' ? 'Bus' :
+      tags.railway === 'tram_stop' ? 'Tram' :
+      tags.railway === 'subway_entrance' ? 'Metro' :
+      tags.railway === 'station' ? 'Train' : 'Transit';
+    return { lat, lon, mode, title: tags.name || `Line ${tags.ref}` || `${mode} Stop`, detail: tags.route_ref ? `Routes: ${tags.route_ref}` : helpers.formatDistance(dist), provider: tags.operator || 'Public', _dist: dist };
+  }).filter(Boolean).sort((a, b) => a._dist - b._dist).slice(0, 60);
 
-window.switchTab = function(tabName) {
-    playSound('tab');
-    STATE.currentTab = tabName;
-
-    // Toggle HTML Visibility
-    const transportSec = document.getElementById('transport-section');
-    const placesSec = document.getElementById('places-section');
-    const buttons = document.querySelectorAll('.tab-btn');
-
-    if (buttons.length >= 2) {
-        if (tabName === 'transport') {
-            transportSec.style.display = 'block';
-            placesSec.style.display = 'none';
-            buttons[0].classList.add('active');
-            buttons[1].classList.remove('active');
-        } else {
-            transportSec.style.display = 'none';
-            placesSec.style.display = 'block';
-            buttons[0].classList.remove('active');
-            buttons[1].classList.add('active');
-        }
-    }
-
-    // Sync Map
-    updateMapWithVisibleItems();
-};
-
-window.nextTransport = function() {
-    playSound('tap');
-    const visible = getVisibleTransportItems();
-    const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
-    const currentPage = Math.floor(STATE.transport.currentIndex / PAGE_SIZE) + 1;
-    const nextPage = currentPage >= totalPages ? 1 : currentPage + 1;
-    goToTransportPage(nextPage);
-};
-
-window.nextPlaceGroup = function(categoryKey) {
-    playSound('tap');
-    const groupItems = STATE.places.groups[categoryKey]?.items || [];
-    const totalPages = Math.max(1, Math.ceil(groupItems.length / PAGE_SIZE));
-    const currentPage = Math.floor((STATE.places.indexes[categoryKey] || 0) / PAGE_SIZE) + 1;
-    const nextPage = currentPage >= totalPages ? 1 : currentPage + 1;
-    goToPlacesPage(categoryKey, nextPage);
-};
-
-/**
- * --- MAP SYNCHRONIZER ---
- */
-function updateMapWithVisibleItems() {
-    if (!STATE.userCoords) return;
-
-    let targetsToDraw = [];
-
-    if (STATE.currentTab === 'transport') {
-        const start = STATE.transport.currentIndex;
-        const visible = getVisibleTransportItems();
-        targetsToDraw = visible.slice(start, start + PAGE_SIZE);
-    } 
-    else if (STATE.currentTab === 'places') {
-        Object.keys(STATE.places.groups).forEach(key => {
-            const group = STATE.places.groups[key];
-            const start = STATE.places.indexes[key] || 0;
-            targetsToDraw = targetsToDraw.concat(group.items.slice(start, start + PAGE_SIZE));
-        });
-    }
-
-    if (window.drawConnections) {
-        window.drawConnections(STATE.userCoords, targetsToDraw);
-    }
-}
-
-
-/**
- * --- RENDERERS ---
- */
-function renderTransportList() {
-    const container = document.getElementById('transport-cards');
-    if (!container) return;
-
-    const visibleItems = getVisibleTransportItems();
-    const totalPages = Math.max(1, Math.ceil(visibleItems.length / PAGE_SIZE));
-    const maxStart = (totalPages - 1) * PAGE_SIZE;
-    const start = Math.min(STATE.transport.currentIndex, maxStart);
-    STATE.transport.currentIndex = start;
-    const currentPage = Math.floor(start / PAGE_SIZE) + 1;
-    const batch = visibleItems.slice(start, start + PAGE_SIZE);
-
-    if (batch.length === 0) {
-        container.innerHTML = '<p style="opacity:0.6;">No transport found. Try broadening filters or refreshing your location.</p>';
-        return;
-    }
-
-    const cardsHtml = batch.map(item => {
-        const key = buildItemKey(item);
-        const isFav = isFavorite(key);
-        return `
-        <article class="card" style="cursor: pointer;" 
-            onclick="selectLocation('${item.mode}', ${item.lat}, ${item.lon}, '${item.title.replace(/'/g, "\\'")}', '${formatDistance(item._dist)}', '${item.eta}')">
-            <div class="card-header">
-                <span class="card-badge">${item.mode}</span>
-                <span class="card-status">${item.status}</span>
-            </div>
-            <h4 class="card-title">${item.title}</h4>
-            <p class="card-text">${item.detail}</p>
-            <div class="card-tags">
-                <span class="card-tag">${item.provider}</span>
-                <span class="card-tag">${item.eta}</span>
-            </div>
-            <button class="ghost-btn fav-btn ${isFav ? 'is-active' : ''}" type="button" onclick="event.stopPropagation(); toggleFavoriteFromCard('${key}')">${isFav ? 'Saved' : 'Save stop'}</button>
-        </article>`;
-    }).join('');
-
-    const paginationHtml = renderTransportPagination(currentPage, totalPages);
-    container.innerHTML = cardsHtml + paginationHtml;
-}
-
-function renderPlacesList() {
-    const container = document.getElementById('places-cards');
-    if (!container) return;
-
-    const groupsHtml = Object.keys(STATE.places.groups).map(key => {
-        const group = STATE.places.groups[key];
-        const totalPages = Math.max(1, Math.ceil(group.items.length / PAGE_SIZE));
-        const maxStart = (totalPages - 1) * PAGE_SIZE;
-        const currentIndex = Math.min(STATE.places.indexes[key] || 0, maxStart);
-        STATE.places.indexes[key] = currentIndex;
-        const currentPage = Math.floor(currentIndex / PAGE_SIZE) + 1;
-        const batch = group.items.slice(currentIndex, currentIndex + PAGE_SIZE);
-
-        if (batch.length === 0) return '';
-
-        const listItems = batch.map(item => {
-            const safeName = item.name.replace(/'/g, "\\'");
-            const key = buildItemKey({ mode: group.category, lat: item.lat, lon: item.lon });
-            const isFav = isFavorite(key);
-            return `
-            <li style="cursor: pointer;" onclick="event.stopPropagation(); selectLocation('${group.category}', ${item.lat}, ${item.lon}, '${safeName}', '${item.distance}', '${item.rating}')">
-                <div class="card-header">
-                    <strong>${item.name}</strong>
-                    <span class="card-tag">${item.rating}</span>
-                </div>
-                <p class="card-text">${item.address} - ${item.distance}</p>
-                <button class="ghost-btn fav-btn ${isFav ? 'is-active' : ''}" type="button" onclick="event.stopPropagation(); toggleFavoriteFromPlace('${safeName}', '${group.category}', ${item.lat}, ${item.lon}, '${item.distance}', '${item.rating}')">${isFav ? 'Saved' : 'Save visit'}</button>
-            </li>`;
-        }).join('');
-
-        const paginationBar = renderPlacesPagination(key, currentPage, totalPages);
-
-        return `
-        <article class="card">
-            <h4 class="card-title">${group.category} 🎵</h4>
-            <p class="card-text">${group.description}</p>
-            <ul class="card-list">${listItems}</ul>
-            ${paginationBar}
-        </article>`;
-    }).join('');
-
-    container.innerHTML = groupsHtml;
-}
-
-function buildPaginationSequence(currentPage, totalPages) {
-    if (totalPages <= 7) {
-        return Array.from({ length: totalPages }, (_, i) => i + 1);
-    }
-
-    const sequence = [];
-    const addPage = (page) => {
-        if (page >= 1 && page <= totalPages && !sequence.includes(page)) {
-            sequence.push(page);
-        }
-    };
-
-    addPage(1);
-    addPage(2);
-
-    if (currentPage > 4) sequence.push('ellipsis-left');
-
-    addPage(currentPage - 1);
-    addPage(currentPage);
-    addPage(currentPage + 1);
-
-    if (currentPage < totalPages - 3) sequence.push('ellipsis-right');
-
-    addPage(totalPages - 1);
-    addPage(totalPages);
-
-    return sequence;
-}
-
-function renderTransportPagination(currentPage, totalPages) {
-    if (totalPages <= 1) return '';
-    const sequence = buildPaginationSequence(currentPage, totalPages);
-    const selectOptions = Array.from({ length: totalPages }, (_, i) => {
-        const pageNum = i + 1;
-        return `<option value="${pageNum}" ${pageNum === currentPage ? 'selected' : ''}>Page ${pageNum} of ${totalPages}</option>`;
-    }).join('');
-
-    const buttons = sequence.map(entry => {
-        if (entry === 'ellipsis-left' || entry === 'ellipsis-right') {
-            return `<select class="page-select" aria-label="Jump to transport page" onchange="goToTransportPage(Number(this.value))">${selectOptions}</select>`;
-        }
-        const isActive = entry === currentPage;
-        return `<button class="page-btn ${isActive ? 'is-active' : ''}" type="button" onclick="goToTransportPage(${entry})">${entry}</button>`;
-    }).join('');
-
-    return `<div class="pagination-bar" aria-label="Transport pagination">${buttons}</div>`;
-}
-
-function renderPlacesPagination(groupKey, currentPage, totalPages) {
-    if (totalPages <= 1) return '';
-    const sequence = buildPaginationSequence(currentPage, totalPages);
-    const selectOptions = Array.from({ length: totalPages }, (_, i) => {
-        const pageNum = i + 1;
-        return `<option value="${pageNum}" ${pageNum === currentPage ? 'selected' : ''}>Page ${pageNum} of ${totalPages}</option>`;
-    }).join('');
-
-    const buttons = sequence.map(entry => {
-        if (entry === 'ellipsis-left' || entry === 'ellipsis-right') {
-            return `<select class="page-select" aria-label="Jump to ${groupKey} page" onchange="goToPlacesPage('${groupKey}', Number(this.value))">${selectOptions}</select>`;
-        }
-        const isActive = entry === currentPage;
-        return `<button class="page-btn ${isActive ? 'is-active' : ''}" type="button" onclick="goToPlacesPage('${groupKey}', ${entry})">${entry}</button>`;
-    }).join('');
-
-    return `<div class="pagination-bar" aria-label="${groupKey} pagination">${buttons}</div>`;
-}
-
-function clampPage(page, totalPages) {
-    const parsedPage = Number(page);
-    const safePage = Number.isFinite(parsedPage) ? parsedPage : 1;
-    return Math.min(Math.max(1, Math.floor(safePage)), totalPages);
-}
-
-window.goToTransportPage = function(page) {
-    const visible = getVisibleTransportItems();
-    const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
-    const targetPage = clampPage(page, totalPages);
-    STATE.transport.currentIndex = (targetPage - 1) * PAGE_SIZE;
-    renderTransportList();
-    updateMapWithVisibleItems();
-};
-
-window.goToPlacesPage = function(groupKey, page) {
-    const group = STATE.places.groups[groupKey];
-    if (!group) return;
-    const totalPages = Math.max(1, Math.ceil(group.items.length / PAGE_SIZE));
-    const targetPage = clampPage(page, totalPages);
-    STATE.places.indexes[groupKey] = (targetPage - 1) * PAGE_SIZE;
-    renderPlacesList();
-    updateMapWithVisibleItems();
-};
-
-/**
- * --- HELPERS ---
- */
-function buildItemKey(item) {
-    return `${item.mode}-${item.lat}-${item.lon}`;
-}
-
-function isFavorite(key) {
-    return STATE.favorites.some(f => f.key === key);
-}
-
-function getVisibleTransportItems() {
-    const modes = STATE.transport.filters.modes;
-    let list = [...STATE.transport.allItems];
-
-    if (!modes.has('all')) {
-        list = list.filter(item => modes.has(item.mode.toLowerCase()));
-    }
-
-    if (STATE.transport.filters.sortBy === 'eta') {
-        list.sort((a, b) => estimateMinutesFromDistance(a._dist) - estimateMinutesFromDistance(b._dist));
-    } else {
-        list.sort((a, b) => a._dist - b._dist);
-    }
-
-    return list;
-}
-
-function getDistance(origin, target) {
-    if (!origin || !target) return Infinity;
-    const R = 6371000; 
-    const toRad = n => n * Math.PI / 180;
-    const dLat = toRad(target.latitude - origin.latitude);
-    const dLon = toRad(target.longitude - origin.longitude);
-    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(origin.latitude))*Math.cos(toRad(target.latitude))*Math.sin(dLon/2)**2;
-    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-}
-function formatDistance(m) { return m === Infinity ? '—' : (m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(1) + ' km'); }
-function estimateWalk(m) { return m === Infinity ? '—' : '~' + Math.max(1, Math.round(m / 80)) + ' min walk'; }
-function estimateMinutesFromDistance(m) { return m === Infinity ? Infinity : Math.max(1, Math.round(m / 80)); }
-
-function fetchOverpass(query) {
-    return fetch('https://overpass-api.de/api/interpreter', {
-        method: 'POST', body: '[out:json][timeout:25];' + query + 'out center 60;'
-    }).then(res => res.json()).then(data => data.elements);
-}
-
-function processTransport(elements, userCoords) {
-    return elements.map(el => {
-        const tags = el.tags || {};
-        if (!tags.name && !tags.ref) return null;
-        const lat = el.lat || el.center?.lat;
-        const lon = el.lon || el.center?.lon;
-        const dist = getDistance(userCoords, { latitude: lat, longitude: lon });
-        
-        let mode = 'Transit';
-        if (tags.highway === 'bus_stop') mode = 'Bus';
-        else if (tags.railway === 'tram_stop') mode = 'Tram';
-        else if (tags.railway === 'subway_entrance') mode = 'Metro';
-        else if (tags.railway === 'station') mode = 'Train';
-
-        return {
-            lat, lon, mode,
-            title: tags.name || `Line ${tags.ref}` || `${mode} Stop`,
-            detail: tags.route_ref ? `Routes: ${tags.route_ref}` : formatDistance(dist),
-            provider: tags.operator || 'Public',
-            eta: estimateWalk(dist),
-            status: 'Nearby',
-            _dist: dist
-        };
-    }).filter(Boolean).sort((a, b) => a._dist - b._dist);
-}
-
-function processPlaces(elements, userCoords) {
+  const normalizePlaces = (elements, coords) => {
     const groups = {
-        'food': { 
-            category: 'Food & Drink', 
-            description: 'Quick bites and local flavors.', 
-            match: 'cafe|restaurant|bar', 
-            items: [] 
-        },
-        'fun': { 
-            category: 'Parks & Recreation', 
-            description: 'Places to unwind and explore.', 
-            match: 'park|garden|museum', 
-            items: [] 
-        },
-        'service': { 
-            category: 'Mobility & Services', 
-            description: 'Travel helpers and essentials.', 
-            match: 'taxi|bicycle|bank', 
-            items: [] 
-        }
+      food: { key: 'food', category: 'Food & Drink', description: 'Quick bites nearby.', items: [] },
+      fun: { key: 'fun', category: 'Parks & Recreation', description: 'Spots to unwind.', items: [] },
+      service: { key: 'service', category: 'Mobility & Services', description: 'Helpful services close by.', items: [] }
     };
-
     elements.forEach(el => {
-        const tags = el.tags || {};
-        if (!tags.name) return;
-        const lat = el.lat || el.center?.lat;
-        const lon = el.lon || el.center?.lon;
-        const dist = getDistance(userCoords, { latitude: lat, longitude: lon });
-        
-        let targetGroup = groups.service;
-        if (tags.amenity && groups.food.match.includes(tags.amenity)) targetGroup = groups.food;
-        else if (tags.leisure && groups.fun.match.includes(tags.leisure)) targetGroup = groups.fun;
-
-        targetGroup.items.push({
-            lat, lon, name: tags.name,
-            rating: estimateWalk(dist),
-            address: formatDistance(dist),
-            distance: formatDistance(dist),
-            _dist: dist
-        });
+      const tags = el.tags || {};
+      const lat = el.lat || el.center?.lat;
+      const lon = el.lon || el.center?.lon;
+      if (!lat || !lon || !tags.name) return;
+      const dist = helpers.distance(coords, { latitude: lat, longitude: lon });
+      const base = { lat, lon, name: tags.name, address: helpers.formatDistance(dist), rating: helpers.walkEta(dist), _dist: dist };
+      if (tags.amenity && ['cafe', 'restaurant', 'bar'].includes(tags.amenity)) groups.food.items.push(base);
+      else if (tags.leisure && ['park', 'garden'].includes(tags.leisure) || tags.tourism === 'museum') groups.fun.items.push(base);
+      else groups.service.items.push(base);
     });
-
-    Object.keys(groups).forEach(key => groups[key].items.sort((a, b) => a._dist - b._dist));
+    Object.values(groups).forEach(g => g.items.sort((a, b) => a._dist - b._dist));
     return groups;
-}
+  };
 
-/**
- * --- CONTROLLER ---
- */
-async function loadDashboard(coords) {
-    STATE.userCoords = coords;
-    const { latitude, longitude } = coords;
-    const radius = DEFAULT_SEARCH_RADIUS;
+  const setMode = mode => {
+    state.transport.mode = mode;
+    state.transport.page = 0;
+    document.querySelectorAll('[data-mode-filter]').forEach(btn => btn.classList.toggle('active', btn.dataset.modeFilter === mode));
+    render.renderTransport();
+    render.renderMapTargets();
+  };
 
-    const transportQuery = `(
-        node["highway"="bus_stop"](around:${radius},${latitude},${longitude});
-        node["railway"~"tram_stop|subway_entrance|station"](around:${radius},${latitude},${longitude});
-    );`;
+  const toggleFavorite = data => {
+    const key = data.key || helpers.buildKey(data);
+    const idx = state.favorites.findIndex(f => f.key === key);
+    if (idx >= 0) state.favorites.splice(idx, 1);
+    else state.favorites.push({ key, title: data.title, mode: data.mode, lat: data.lat, lon: data.lon, distance: data.distance, eta: data.eta });
+    helpers.saveFavorites();
+    render.renderFavorites();
+    render.renderTransport();
+    render.renderPlaces();
+  };
 
-    const placesQuery = `(
-        node["amenity"~"cafe|restaurant|bar|taxi|bicycle_rental"](around:${radius},${latitude},${longitude});
-        node["leisure"~"park|garden"](around:${radius},${latitude},${longitude});
-        node["tourism"="museum"](around:${radius},${latitude},${longitude});
-    );`;
+  const selectLocation = data => {
+    state.lastSelection = { category: data.mode, title: data.title, lat: data.lat, lon: data.lon, dist: data.distance, eta: data.eta };
+    render.renderTrip(state.lastSelection);
+    render.renderMapTargets();
+    if (window.highlightRoute) window.highlightRoute(data.lat, data.lon);
+  };
 
-    try {
-        const transportTask = fetchOverpass(transportQuery).then(raw => {
-            STATE.transport.allItems = processTransport(raw, coords);
-            STATE.transport.currentIndex = 0;
-            renderTransportList();
-            return STATE.transport.allItems;
-        });
-
-        const placesTask = fetchOverpass(placesQuery).then(raw => {
-            STATE.places.groups = processPlaces(raw, coords);
-            Object.keys(STATE.places.groups).forEach(key => STATE.places.indexes[key] = 0);
-            renderPlacesList();
-            return STATE.places.groups;
-        });
-
-        await Promise.all([transportTask, placesTask]);
-        updateMapWithVisibleItems();
-
-    } catch (error) {
-        console.error('Dashboard load failed:', error);
-    }
-}
-
-function toggleModeFilter(mode) {
-    playSound('tap');
-    if (mode === 'all') {
-        STATE.transport.filters.modes = new Set(['all']);
+  const changePage = (target, step) => {
+    if (target === 'transport') {
+      const filtered = state.transport.items.filter(item => state.transport.mode === 'all' || item.mode.toLowerCase() === state.transport.mode);
+      const total = Math.max(1, Math.ceil(filtered.length / helpers.PAGE_SIZE));
+      state.transport.page = helpers.clamp(state.transport.page + step, 0, total - 1);
+      render.renderTransport();
     } else {
-        STATE.transport.filters.modes = new Set([mode]);
+      const group = state.places.groups[target];
+      if (!group) return;
+      const total = Math.max(1, Math.ceil((group.items || []).length / helpers.PAGE_SIZE));
+      const next = helpers.clamp((state.places.page[target] || 0) + step, 0, total - 1);
+      state.places.page[target] = next;
+      render.renderPlaces();
     }
-    STATE.transport.currentIndex = 0;
-    syncFilterButtons();
-    renderTransportList();
-    updateMapWithVisibleItems();
-}
+    render.renderMapTargets();
+  };
 
-function syncFilterButtons() {
-    const modes = STATE.transport.filters.modes;
-    document.querySelectorAll('[data-mode-filter]').forEach(btn => {
-        const key = btn.getAttribute('data-mode-filter');
-        const active = modes.has('all') ? key === 'all' : modes.has(key);
-        btn.classList.toggle('active', active);
-    });
-}
-
-function changeTransportSort(value) {
-    STATE.transport.filters.sortBy = value;
-    STATE.transport.currentIndex = 0;
-    renderTransportList();
-    updateMapWithVisibleItems();
-}
-
-function toggleFavoriteFromCard(key) {
-    const item = STATE.transport.allItems.find(entry => buildItemKey(entry) === key);
-    if (!item) return;
-    toggleFavorite(item);
-}
-
-function toggleFavoriteFromPlace(title, category, lat, lon, distance, eta) {
-    const item = { title, mode: category, lat, lon, distance, eta };
-    toggleFavorite(item);
-}
-
-function toggleFavorite(item) {
-    const key = buildItemKey(item);
-    const existingIndex = STATE.favorites.findIndex(f => f.key === key);
-    const distanceText = item.distance || (Number.isFinite(item._dist) ? formatDistance(item._dist) : '—');
-    const etaText = item.eta || (Number.isFinite(item._dist) ? estimateWalk(item._dist) : '—');
-    if (existingIndex >= 0) {
-        STATE.favorites.splice(existingIndex, 1);
-    } else {
-        STATE.favorites.push({ key, title: item.title, mode: item.mode, lat: item.lat, lon: item.lon, distance: distanceText, eta: etaText });
+  const handleAction = node => {
+    const action = node.dataset.action;
+    if (action === 'select') {
+      selectLocation({
+        title: decodeURIComponent(node.dataset.title || ''),
+        mode: node.dataset.mode,
+        lat: Number(node.dataset.lat),
+        lon: Number(node.dataset.lon),
+        distance: node.dataset.distance,
+        eta: node.dataset.eta
+      });
+    } else if (action === 'favorite') {
+      toggleFavorite({
+        key: node.dataset.key,
+        title: decodeURIComponent(node.dataset.title || ''),
+        mode: node.dataset.mode,
+        lat: Number(node.dataset.lat),
+        lon: Number(node.dataset.lon),
+        distance: node.dataset.distance,
+        eta: node.dataset.eta
+      });
+    } else if (action === 'jump-favorite') {
+      selectLocation({
+        title: decodeURIComponent(node.dataset.title || ''),
+        mode: node.dataset.mode,
+        lat: Number(node.dataset.lat),
+        lon: Number(node.dataset.lon),
+        distance: node.dataset.distance,
+        eta: node.dataset.eta
+      });
+    } else if (action === 'page') {
+      changePage(node.dataset.target, Number(node.dataset.step) || 0);
+    } else if (action === 'clear-favorites') {
+      state.favorites = [];
+      helpers.saveFavorites();
+      render.renderFavorites();
+      render.renderTransport();
+      render.renderPlaces();
     }
-    persistFavorites();
-    renderTransportList();
-    renderFavorites();
-}
+  };
 
-function renderFavorites() {
-    const section = document.getElementById('favorites-section');
-    const list = document.getElementById('favorites-list');
-    if (!section || !list) return;
-
-    if (STATE.favorites.length === 0) {
-        section.style.display = 'none';
-        list.innerHTML = '';
+  const wireEvents = () => {
+    document.addEventListener('click', evt => {
+      const modeBtn = evt.target.closest('[data-mode-filter]');
+      if (modeBtn) return setMode(modeBtn.dataset.modeFilter);
+      const tabBtn = evt.target.closest('[data-tab]');
+      if (tabBtn) {
+        render.setTab(tabBtn.dataset.tab);
+        render.renderMapTargets();
         return;
-    }
+      }
+      const node = evt.target.closest('[data-action]');
+      if (node) handleAction(node);
+    });
+    const refresh = document.getElementById('refresh-location');
+    if (refresh) refresh.addEventListener('click', requestLocation);
+  };
 
-    section.style.display = 'block';
-    list.innerHTML = STATE.favorites.map(f => `
-        <button class="pill" onclick="selectLocation('${f.mode}', ${f.lat}, ${f.lon}, '${f.title.replace(/'/g, "\\'")}', '${f.distance}', '${f.eta}')">${f.mode} · ${f.title} · ${f.distance}</button>
-    `).join('');
-}
-
-function persistFavorites() {
-    try { localStorage.setItem(FAVORITES_KEY, JSON.stringify(STATE.favorites)); } catch (_) { /* ignore */ }
-}
-
-function loadFavorites() {
-    try {
-        const saved = localStorage.getItem(FAVORITES_KEY);
-        if (saved) STATE.favorites = JSON.parse(saved);
-    } catch (_) {
-        STATE.favorites = [];
-    }
-    renderFavorites();
-}
-
-function clearFavorites() {
-    STATE.favorites = [];
-    persistFavorites();
-    renderFavorites();
-}
-
-function requestLocationUpdate() {
+  const requestLocation = () => {
     if (!navigator.geolocation) return;
-    navigator.geolocation.getCurrentPosition(
-        async pos => {
-            STATE.transport.currentIndex = 0;
-            await loadDashboard(pos.coords);
-            if (window.onLocationFound) {
-                window.onLocationFound({ coords: pos.coords });
-            }
+    navigator.geolocation.getCurrentPosition(pos => {
+      applyLocation(pos.coords);
+      if (window.onLocationFound) window.onLocationFound({ coords: pos.coords });
+    }, err => console.warn('GPS unavailable', err), { enableHighAccuracy: true, timeout: 12000 });
+  };
 
-            // Re-apply last selection after fresh data
-            if (STATE.lastSelection) {
-                const sel = STATE.lastSelection;
-                selectLocation(sel.category, sel.lat, sel.lon, sel.title, sel.dist, sel.eta);
-            }
-        },
-        err => console.warn('Refresh location failed:', err),
-        { enableHighAccuracy: true, timeout: 15000 }
-    );
-}
+  const applyLocation = coords => {
+    state.coords = coords;
+    state.transport.page = 0;
+    state.places.page = {};
+    fetchData(coords);
+  };
 
-document.addEventListener('DOMContentLoaded', function() {
-    const refreshBtn = document.getElementById('refresh-location');
-    if (refreshBtn) refreshBtn.addEventListener('click', requestLocationUpdate);
-
-    loadFavorites();
-    syncFilterButtons();
-
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            pos => loadDashboard(pos.coords),
-            err => console.warn('No GPS:', err),
-            { enableHighAccuracy: true, timeout: 15000 }
-        );
+  const fetchData = async coords => {
+    try {
+      const [transportRaw, placesRaw] = await Promise.all([
+        fetchOverpass(transportQuery(coords)),
+        fetchOverpass(placesQuery(coords))
+      ]);
+      state.transport.items = normalizeTransport(transportRaw, coords);
+      state.places.groups = normalizePlaces(placesRaw, coords);
+      state.lastUpdated = new Date().toLocaleString();
+      render.renderAll();
+    } catch (err) {
+      console.warn('Data load failed', err);
     }
-});
+  };
+
+  const init = () => {
+    helpers.loadFavorites();
+    render.renderFavorites();
+    render.setTab(state.tab);
+    wireEvents();
+    requestLocation();
+  };
+
+  document.addEventListener('DOMContentLoaded', init);
+})();
